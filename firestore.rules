@@ -1,0 +1,67 @@
+// ============================================================
+// FIRESTORE SECURITY RULES — StudentMS
+// Deploy via: firebase deploy --only firestore:rules
+// ============================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwnerOrAdmin(userId) {
+      return isAuthenticated() &&
+        (request.auth.uid == userId || isAdmin());
+    }
+
+    function validStudentData() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 150
+          && d.studentId is string && d.studentId.size() > 0 && d.studentId.size() <= 60
+          && d.className is string
+          && (!('aadhaarNo' in d) || d.aadhaarNo is string)
+          && (!('contactNo' in d) || d.contactNo is string);
+    }
+
+    // ── Users collection ──────────────────────────────────
+    // Users can read their own doc; admins can read all
+    match /users/{userId} {
+      allow read:   if isOwnerOrAdmin(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Students collection ───────────────────────────────
+    match /students/{studentId} {
+      // Any authenticated user can read
+      allow read:   if isAuthenticated();
+      // Any authenticated user can create (validated)
+      allow create: if isAuthenticated() && validStudentData();
+      // Any authenticated user can update
+      allow update: if isAuthenticated() && validStudentData();
+      // Only admins can hard-delete
+      allow delete: if isAdmin();
+    }
+
+    // ── Settings collection ───────────────────────────────
+    match /settings/{docId} {
+      allow read:   if isAuthenticated();
+      allow write:  if isAdmin();
+    }
+
+    // ── Deny everything else ──────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

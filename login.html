@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="StudentMS – School Student Management System Login" />
+<title>Login – StudentMS</title>
+<link rel="stylesheet" href="assets/css/style.css" />
+<link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
+</head>
+<body>
+
+<div class="login-page">
+  <div class="login-card">
+
+    <div class="login-logo">🎓</div>
+    <div class="login-title">StudentMS</div>
+    <div class="login-sub">School Student Management System</div>
+
+    <!-- Login Form -->
+    <form id="loginForm" novalidate>
+      <div class="field" id="fw-email">
+        <label>Email Address <span class="req">*</span></label>
+        <input type="email" id="loginEmail" placeholder="admin@school.edu"
+               autocomplete="email" maxlength="200" />
+        <span class="field-err">Enter a valid email address.</span>
+      </div>
+
+      <div class="field" id="fw-password">
+        <label>Password <span class="req">*</span></label>
+        <div style="position:relative;">
+          <input type="password" id="loginPassword" placeholder="Enter password"
+                 autocomplete="current-password" maxlength="128" />
+          <button type="button" id="togglePwd" tabindex="-1"
+            style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+                   background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;"
+            aria-label="Toggle password visibility">
+            👁
+          </button>
+        </div>
+        <span class="field-err">Password is required.</span>
+      </div>
+
+      <div id="loginError" role="alert" style="display:none;background:var(--rose-dim);border:1px solid rgba(244,63,94,0.25);
+           border-radius:var(--r-md);padding:10px 14px;font-size:12px;color:var(--rose2);
+           margin-bottom:16px;font-weight:600;"></div>
+
+      <button type="submit" class="btn btn-gradient btn-full btn-lg" id="loginBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             style="width:16px;height:16px;" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="loginBtnLabel">Sign In</span>
+      </button>
+    </form>
+
+    <!-- First-time setup (hidden by default) -->
+    <div id="setupSection" style="display:none;margin-top:24px;padding-top:24px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:16px;font-weight:600;">
+        ⚙️ First-Time Setup — Create Admin Account
+      </div>
+      <form id="setupForm" novalidate>
+        <div class="field">
+          <label>Display Name</label>
+          <input type="text" id="setupName" placeholder="Admin Name" maxlength="100" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="setupEmail" placeholder="admin@school.edu" maxlength="200" />
+        </div>
+        <div class="field">
+          <label>Password (min 6 chars)</label>
+          <input type="password" id="setupPassword" placeholder="Create a strong password" maxlength="128" />
+        </div>
+        <div id="setupError" role="alert" style="display:none;background:var(--rose-dim);border:1px solid rgba(244,63,94,0.25);
+             border-radius:var(--r-md);padding:10px 14px;font-size:12px;color:var(--rose2);
+             margin-bottom:12px;font-weight:600;"></div>
+        <button type="submit" class="btn btn-gradient btn-full">
+          <span id="setupBtnLabel">Create Admin &amp; Sign In</span>
+        </button>
+      </form>
+    </div>
+
+    <div class="login-footer">
+      <a href="#" id="showSetupLink" style="color:var(--indigo2);text-decoration:underline;font-size:11px;">
+        First time? Create admin account
+      </a>
+      &nbsp;·&nbsp;
+      <span onclick="toggleTheme()" style="cursor:pointer;" role="button" tabindex="0" aria-label="Toggle theme">
+        <span id="themeIcon">🌙</span> Theme
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" role="alert" aria-live="assertive">
+  <span class="toast-icon" id="toastIcon" aria-hidden="true"></span>
+  <span id="toastMsg"></span>
+</div>
+
+<!-- Firebase SDKs v9 compat (CDN, free) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+<!-- App scripts (order matters) -->
+<!-- <script src="assets/js/firebase/config.js"></script>
+<script src="assets/js/utils/helpers.js"></script>
+<script src="assets/js/utils/security.js"></script>
+<script src="assets/js/services/auth.service.js"></script> -->
+
+<script src="assets/js/firebase/config.js"></script>
+<script src="assets/js/utils/helpers.js"></script>
+<script src="assets/js/utils/security.js"></script>
+<script src="assets/js/services/auth.service.js"></script>
+<script src="assets/js/services/student.service.js"></script>
+<script src="assets/js/services/drive.service.js"></script>
+<script src="assets/js/services/export.service.js"></script>
+<script src="assets/js/components/multiselect.js"></script>
+<script src="assets/js/components/bulk-download.js"></script>
+<script src="assets/js/components/dashboard.js"></script>
+
+<script>
+'use strict';
+
+initFirebase();
+initTheme();
+
+/* ── Redirect if already logged in ── */
+AuthService.onAuthStateChanged((user) => {
+  if (user) window.location.replace('dashboard.html');
+});
+
+/* ── Login form ── */
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errBox   = document.getElementById('loginError');
+  const btn      = document.getElementById('loginBtn');
+  const lbl      = document.getElementById('loginBtnLabel');
+  const fwEmail  = document.getElementById('fw-email');
+  const fwPwd    = document.getElementById('fw-password');
+
+  // Clear previous errors
+  errBox.style.display = 'none';
+  fwEmail.classList.remove('has-err');
+  fwPwd.classList.remove('has-err');
+
+  // Client-side validation
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    fwEmail.classList.add('has-err'); return;
+  }
+  if (!password) { fwPwd.classList.add('has-err'); return; }
+
+  btn.disabled = true;
+  lbl.textContent = 'Signing in…';
+
+  const result = await AuthService.signIn(email, password);
+
+  if (result.ok) {
+    lbl.textContent = 'Redirecting…';
+    // onAuthStateChanged will redirect
+  } else {
+    errBox.textContent = result.msg;
+    errBox.style.display = 'block';
+    btn.disabled = false;
+    lbl.textContent = 'Sign In';
+  }
+});
+
+/* ── Toggle setup section ── */
+document.getElementById('showSetupLink').addEventListener('click', e => {
+  e.preventDefault();
+  const sec = document.getElementById('setupSection');
+  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+});
+
+/* ── Setup form ── */
+document.getElementById('setupForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name  = document.getElementById('setupName').value.trim();
+  const email = document.getElementById('setupEmail').value.trim();
+  const pwd   = document.getElementById('setupPassword').value;
+  const err   = document.getElementById('setupError');
+  const lbl   = document.getElementById('setupBtnLabel');
+
+  err.style.display = 'none';
+  if (!name || !email || !pwd) {
+    err.textContent = 'All fields required.';
+    err.style.display = 'block';
+    return;
+  }
+  if (pwd.length < 6) {
+    err.textContent = 'Password must be at least 6 characters.';
+    err.style.display = 'block';
+    return;
+  }
+
+  lbl.textContent = 'Creating account…';
+  const result = await AuthService.registerAdmin(email, pwd, name);
+  if (result.ok) {
+    // Auto sign-in after registration
+    const signinResult = await AuthService.signIn(email, pwd);
+    if (!signinResult.ok) {
+      err.textContent = signinResult.msg;
+      err.style.display = 'block';
+      lbl.textContent = 'Create Admin & Sign In';
+    }
+  } else {
+    err.textContent = result.msg;
+    err.style.display = 'block';
+    lbl.textContent = 'Create Admin & Sign In';
+  }
+});
+
+/* ── Password toggle ── */
+document.getElementById('togglePwd').addEventListener('click', () => {
+  const input = document.getElementById('loginPassword');
+  input.type = input.type === 'password' ? 'text' : 'password';
+});
+</script>
+</body>
+</html>

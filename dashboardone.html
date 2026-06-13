@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard – StudentMS</title>
+    <link rel="stylesheet" href="assets/css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
+  </head>
+  <body>
+    <div class="dash-wrap">
+
+      <!-- ══════════════════════════════════════════
+       TOP NAV
+  ══════════════════════════════════════════ -->
+      <nav class="topnav" role="navigation" aria-label="Main navigation">
+        <!-- Brand -->
+        <div class="brand">
+          <div class="brand-logo" aria-hidden="true">🎓</div>
+          <div class="brand-text">
+            <div class="brand-name">StudentMS</div>
+            <div class="brand-sub">Management System</div>
+          </div>
+        </div>
+
+        <!-- Center search (hidden on mobile, shown in toolbar) -->
+        <div class="nav-center" role="search">
+          <div class="nav-search-wrap">
+            <span class="nav-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2"><circle cx="11" cy="11" r="8" /><path
+                  d="m21 21-4.35-4.35" /></svg>
+            </span>
+            <input type="search" id="navSearch" class="nav-search-input"
+              placeholder="Quick search students…" autocomplete="off"
+              aria-label="Search students" />
+          </div>
+        </div>
+
+        <!-- Right controls -->
+        <div class="nav-right">
+          <div class="nav-chip" id="versionChip" aria-live="polite">v<strong
+              id="appVersion">2.0.0</strong></div>
+
+          <!-- Google Drive connect button -->
+          <button class="drive-btn" id="driveBtn" title="Connect Google Drive"
+            aria-label="Connect Google Drive">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" aria-hidden="true">
+              <path d="M22 17H12l-5-9h10l5 9z" /><path d="M2 17l5-9" /><path
+                d="M12 17l-5-9" />
+            </svg>
+            <span id="driveBtnLabel">Connect Drive</span>
+          </button>
+
+          <!-- Theme toggle -->
+          <button class="nav-icon-btn" id="themeToggleBtn" title="Toggle theme"
+            aria-label="Toggle dark/light theme">
+            <span id="themeIcon">🌙</span>
+          </button>
+
+          <!-- User info / sign out -->
+          <button class="user-btn" id="signOutBtn" title="Sign out"
+            aria-label="Sign out">
+            <div class="user-avatar" id="userAvatar" aria-hidden="true">A</div>
+            <span class="user-name" id="userName">Admin</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- ══════════════════════════════════════════
+       MAIN DASHBOARD PAGE (default view)
+  ══════════════════════════════════════════ -->
+      <main id="pageMain" class="dash-page" role="main">
+
+        <!-- Page header -->
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Student <em>Records</em></h1>
+            <p class="page-sub" id="lastUpdated">Loading database…</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-gradient btn-nav" id="addStudentBtn"
+              aria-label="Add new student">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" aria-hidden="true"><line x1="12" y1="5"
+                  x2="12" y2="19" /><line x1="5" y1="12" x2="19"
+                  y2="12" /></svg>
+              Add Student
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div class="stats-row" role="region" aria-label="Statistics">
+          <div class="stat-card sc-total">
+            <div class="stat-icon" aria-hidden="true">👥</div>
+            <div>
+              <div class="stat-num" id="statTotal" aria-live="polite">0</div>
+              <div class="stat-label">Total Students</div>
+            </div>
+            <div class="stat-pill" id="statTotalPill">All time</div>
+          </div>
+          <div class="stat-card sc-active">
+            <div class="stat-icon" aria-hidden="true">✅</div>
+            <div>
+              <div class="stat-num" id="statActive" aria-live="polite">0</div>
+              <div class="stat-label">Active Students</div>
+            </div>
+            <div class="stat-pill" id="statActivePill">Enrolled</div>
+          </div>
+          <div class="stat-card sc-deleted">
+            <div class="stat-icon" aria-hidden="true">🗑️</div>
+            <div>
+              <div class="stat-num" id="statDeleted" aria-live="polite">0</div>
+              <div class="stat-label">Deleted Students</div>
+            </div>
+            <div class="stat-pill">Archived</div>
+          </div>
+          <div class="stat-card sc-drive">
+            <div class="stat-icon" aria-hidden="true">☁️</div>
+            <div>
+              <div class="stat-num" id="statDrive" aria-live="polite">—</div>
+              <div class="stat-label">Drive Status</div>
+            </div>
+            <div class="stat-pill" id="statDrivePill">Not linked</div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar-card" role="search" aria-label="Search and filter">
+          <div class="toolbar-row1">
+            <!-- Search -->
+            <div class="search-wrap">
+              <span class="search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2"><circle cx="11" cy="11" r="8" /><path
+                    d="m21 21-4.35-4.35" /></svg>
+              </span>
+              <input type="search" id="searchInput" class="search-input"
+                placeholder="Search by name, ID, contact, Aadhaar…"
+                autocomplete="off" aria-label="Search students" />
+              <button class="search-clear" id="searchClearBtn"
+                title="Clear search" aria-label="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line
+                    x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <!-- Class filter -->
+            <select id="filterClass" class="filter-select"
+              aria-label="Filter by class">
+              <option value>All Classes</option>
+            </select>
+
+            <!-- Section filter -->
+            <select id="filterSection" class="filter-select"
+              aria-label="Filter by section">
+              <option value>All Sections</option>
+            </select>
+
+            <!-- Active only toggle -->
+            <select id="filterStatus" class="filter-select"
+              aria-label="Filter by status" style="min-width:110px;">
+              <option value>All Status</option>
+              <option value="active">Active Only</option>
+              <option value="deleted">Deleted Only</option>
+            </select>
+
+            <div class="toolbar-sep" aria-hidden="true"></div>
+
+            <div class="toolbar-btns">
+              <button class="btn btn-export btn-sm" id="exportBtn"
+                title="Export to Excel" aria-label="Export to Excel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" aria-hidden="true"><path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline
+                    points="14,2 14,8 20,8" /><line x1="16" y1="13" x2="8"
+                    y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
+                Export Excel
+              </button>
+              <button class="btn btn-danger btn-sm" id="clearAllBtn"
+                title="Delete all students" aria-label="Delete all students">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" aria-hidden="true"><polyline
+                    points="3,6 5,6 21,6" /><path
+                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <!-- Sort row -->
+          <div class="toolbar-row2">
+            <label
+              style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;"
+              for="sortField">Sort:</label>
+            <select id="sortField" class="filter-select"
+              style="min-width:130px;" aria-label="Sort by">
+              <option value="createdAt">Date Added</option>
+              <option value="name">Name</option>
+              <option value="className">Class</option>
+              <option value="rollNo">Roll No.</option>
+              <option value="studentId">Student ID</option>
+              <option value="session">Session</option>
+            </select>
+            <select id="sortDir" class="filter-select" style="min-width:90px;"
+              aria-label="Sort direction">
+              <option value="desc">Newest ↓</option>
+              <option value="asc">Oldest ↑</option>
+            </select>
+
+            <div class="toolbar-sep" aria-hidden="true"></div>
+
+            <button class="btn btn-ghost btn-sm" id="importBtn"
+              aria-label="Import from Excel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" aria-hidden="true"><path
+                  d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline
+                  points="17,8 12,3 7,8" /><line x1="12" y1="3" x2="12"
+                  y2="15" /></svg>
+              Import
+            </button>
+            <input type="file" id="importFile" accept=".xlsx,.xls"
+              style="display:none;" aria-label="Import Excel file" />
+
+            <button class="btn btn-ghost btn-sm" id="refreshBtn"
+              aria-label="Refresh data">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" aria-hidden="true"><polyline
+                  points="23,4 23,10 17,10" /><polyline
+                  points="1,20 1,14 7,14" /><path
+                  d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+              Refresh
+            </button>
+
+            <span style="margin-left:auto;font-size:12px;color:var(--muted);"
+              id="resultCount" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <!-- Bulk action bar -->
+        <div class="bulk-bar" id="bulkBar" role="toolbar"
+          aria-label="Bulk actions">
+          <span class="bulk-count" id="bulkCount" aria-live="polite">0
+            selected</span>
+          <button class="btn btn-export btn-sm" id="bulkExportBtn"
+            aria-label="Export selected students">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16" /><polyline
+                points="14,2 14,8 20,8" /></svg>
+            Export Selected
+          </button>
+          <button class="btn btn-danger btn-sm" id="bulkDeleteBtn"
+            aria-label="Delete selected students">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2"><polyline points="3,6 5,6 21,6" /><path
+                d="M19 6v14H5V6m3 0V4h8v2" /></svg>
+            Delete Selected
+          </button>
+          <button class="btn btn-ghost btn-sm" id="bulkClearBtn"
+            aria-label="Deselect all">✕ Deselect All</button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-outer" role="region" aria-label="Students table">
+          <div class="table-scroll" tabindex="0">
+            <table id="studentTable" aria-label="Student records">
+              <thead>
+                <tr>
+                  <th class="td-check">
+                    <input type="checkbox" id="selectAll" class="row-check"
+                      aria-label="Select all students" />
+                  </th>
+                  <th class="td-photo" aria-label="Photo"
+                    style="cursor:default;">Photo</th>
+                  <th data-sort="name">Name / ID</th>
+                  <th data-sort="className">Class</th>
+                  <th data-sort="section">SEC</th>
+                  <th data-sort="rollNo">Roll</th>
+                  <th data-sort="fatherName">Father</th>
+                  <th data-sort="motherName">Mother</th>
+                  <th data-sort="guardianName">Guardian</th>
+                  <th data-sort="contactNo">Contact No.</th>
+                  <th data-sort="aadhaarNo">Aadhaar No.</th>
+                  <th data-sort="studentId">Student ID</th>
+                  <th data-sort="bloodGroup">Blood</th>
+                  <th data-sort="session">Session</th>
+                  <th data-sort="academicYear">Acad. Year</th>
+                  <th data-sort="address" style="cursor:default;">Address</th>
+                  <th data-sort="stream">Stream</th>
+                  <th data-sort="subjects" style="cursor:default;">Subjects</th>
+                  <th data-sort="createdAt">Created</th>
+                  <th aria-label="Actions" style="cursor:default;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="studentTbody">
+                <!-- Rows rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-bar" role="navigation" aria-label="Pagination">
+          <div class="page-info">
+            Showing <strong id="pageFrom">0</strong>–<strong
+              id="pageTo">0</strong>
+            of <strong id="pageTotal">0</strong> records
+          </div>
+          <div class="page-controls" id="pageControls" role="group"
+            aria-label="Page controls">
+            <!-- Rendered by JS -->
+          </div>
+          <div class="per-page-wrap">
+            <span class="per-page-label">Per page:</span>
+            <select id="perPage" class="per-page-select"
+              aria-label="Records per page">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
+        </div>
+
+      </main><!-- #pageMain -->
+
+      <!-- ══════════════════════════════════════════
+       REGISTRATION / EDIT PAGE (hidden by default)
+  ══════════════════════════════════════════ -->
+      <main id="pageReg" class="reg-page" style="display:none;" role="main">
+
+        <div class="reg-header">
+          <button class="btn btn-ghost btn-sm" id="backToListBtn"
+            aria-label="Back to student list" style="margin-bottom:16px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" aria-hidden="true"><polyline
+                points="15,18 9,12 15,6" /></svg>
+            Back to List
+          </button>
+          <h2 class="reg-title" id="regTitle">Add <em>New Student</em></h2>
+          <p class="reg-sub" id="regSub">Fill in all required fields. Photo,
+            Aadhaar, and Contact are validated.</p>
+        </div>
+
+        <!-- Edit mode banner -->
+        <div class="edit-banner" id="editBanner" style="display:none;"
+          role="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" aria-hidden="true"><path
+              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path
+              d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+          Editing record: <span class="eb-name" id="editBannerName"></span>
+        </div>
+
+        <div class="form-card">
+          <form id="studentForm" novalidate>
+            <input type="hidden" id="editDocId" />
+            <input type="hidden" id="editPhotoPath" />
+
+            <div class="form-cols">
+
+              <!-- LEFT: Photo -->
+              <div>
+                <div class="section-panel">
+                  <div class="section-head">
+                    <div class="section-icon si-blue"
+                      aria-hidden="true">📷</div>
+                    <div>
+                      <div class="section-label">Student Photo</div>
+                      <div class="section-sub">Camera or file upload ·
+                        JPEG/PNG/WebP</div>
+                    </div>
+                  </div>
+
+                  <!-- Camera preview -->
+                  <div class="camera-wrap">
+                    <div class="cam-header">
+                      <span class="cam-dot r"></span>
+                      <span class="cam-dot a"></span>
+                      <span class="cam-dot g"></span>
+                      Live Camera
+                    </div>
+                    <div class="cam-ph" id="camPlaceholder"
+                      aria-label="Camera not active">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5" aria-hidden="true"><path
+                          d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle
+                          cx="12" cy="13" r="4" /></svg>
+                      Camera not active
+                    </div>
+                    <video id="video" autoplay playsinline muted
+                      aria-label="Camera preview"></video>
+                  </div>
+
+                  <!-- Camera buttons -->
+                  <div class="cam-btns">
+                    <button type="button" class="btn btn-secondary btn-sm"
+                      id="startCamBtn" aria-label="Start camera">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" aria-hidden="true"><path
+                          d="M23 7 16 12l7 5V7z" /><rect x="1" y="5" width="15"
+                          height="14" rx="2" ry="2" /></svg>
+                      Start Cam
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm"
+                      id="rotateCamBtn" style="display:none;"
+                      aria-label="Rotate camera">
+                      🔄 Rotate
+                    </button>
+                    <button type="button" class="btn btn-gradient btn-sm"
+                      id="captureBtn" style="display:none;"
+                      aria-label="Capture photo">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" aria-hidden="true"><circle cx="12"
+                          cy="12" r="3" /><path
+                          d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /></svg>
+                      Capture
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm"
+                      id="stopCamBtn" style="display:none;"
+                      aria-label="Stop camera">
+                      ✕ Stop
+                    </button>
+                  </div>
+
+                  <!-- File upload zone -->
+                  <div class="upload-zone" id="uploadZone" role="button"
+                    tabindex="0" aria-label="Upload photo from file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" aria-hidden="true"><polyline
+                        points="16,16 12,12 8,16" /><line x1="12" y1="12"
+                        x2="12" y2="21" /><path
+                        d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
+                    <p>Drop image here or click to browse</p>
+                    <span>JPEG · PNG · WebP · GIF · Max 10 MB</span>
+                  </div>
+                  <input type="file" id="fileUpload"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    capture="environment" aria-label="Upload photo" />
+
+                  <!-- Preview -->
+                  <div class="preview-wrap" aria-label="Photo preview">
+                    <img id="previewImage" alt="Student photo preview" />
+                    <div class="no-ph" id="noPhPlaceholder">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5" aria-hidden="true"><path
+                          d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle
+                          cx="12" cy="7" r="4" /></svg>
+                      <p>No photo yet</p>
+                    </div>
+                  </div>
+
+                  <!-- Drive status indicator -->
+                  <div class="drive-status" id="driveStatus" role="status">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" aria-hidden="true"><polyline
+                        points="20,6 9,17 4,12" /></svg>
+                    Saved to Google Drive
+                  </div>
+
+                  <button type="button" class="btn btn-ghost btn-sm"
+                    id="clearPhotoBtn"
+                    style="width:100%;justify-content:center;margin-top:6px;"
+                    aria-label="Remove photo">
+                    ✕ Remove Photo
+                  </button>
+                </div>
+              </div><!-- /left -->
+
+              <!-- RIGHT: Form fields -->
+              <div>
+
+                <!-- Section 1: Identity -->
+                <div class="section-panel">
+                  <div class="section-head">
+                    <div class="section-icon si-blue"
+                      aria-hidden="true">🪪</div>
+                    <div>
+                      <div class="section-label">Identity Information</div>
+                      <div class="section-sub">Core identification fields</div>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field" id="fw-name">
+                      <label for="fName">Full Name <span class="req"
+                          aria-label="required">*</span></label>
+                      <input type="text" id="fName" placeholder="e.g. Rahul Das"
+                        maxlength="150" autocomplete="name" />
+                      <span class="field-err" role="alert">Name is
+                        required.</span>
+                    </div>
+                    <div class="field" id="fw-studentId">
+                      <label for="fStudentId">Student ID <span class="req"
+                          aria-label="required">*</span></label>
+                      <input type="text" id="fStudentId"
+                        placeholder="e.g. STU1001" maxlength="60" />
+                      <span class="field-err" role="alert">Student ID required
+                        (unique).</span>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field" id="fw-class">
+                      <label for="fClass">Class <span class="req"
+                          aria-label="required">*</span></label>
+                      <input type="text" id="fClass"
+                        placeholder="e.g. Class 10 / Grade 12" maxlength="60"
+                        list="classList" />
+                      <datalist id="classList">
+                        <option value="Class 1" /><option
+                          value="Class 2" /><option value="Class 3" />
+                        <option value="Class 4" /><option
+                          value="Class 5" /><option value="Class 6" />
+                        <option value="Class 7" /><option
+                          value="Class 8" /><option value="Class 9" />
+                        <option value="Class 10" /><option
+                          value="Class 11" /><option value="Class 12" />
+                      </datalist>
+                      <span class="field-err" role="alert">Class is
+                        required.</span>
+                    </div>
+                    <div class="field">
+                      <label for="fSection">Section (SEC)</label>
+                      <input type="text" id="fSection"
+                        placeholder="e.g. A / B / Science" maxlength="60"
+                        list="sectionList" />
+                      <datalist id="sectionList">
+                        <option value="A" /><option value="B" /><option
+                          value="C" /><option value="D" />
+                      </datalist>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fRollNo">Roll Number</label>
+                      <input type="text" id="fRollNo" placeholder="e.g. 42"
+                        maxlength="20" />
+                    </div>
+                    <div class="field">
+                      <label for="fGender">Gender</label>
+                      <select id="fGender">
+                        <option value>— Select —</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fDob">Date of Birth</label>
+                      <input type="date" id="fDob" />
+                    </div>
+                    <div class="field">
+                      <label for="fBloodGroup">Blood Group</label>
+                      <select id="fBloodGroup">
+                        <option value>— Select —</option>
+                        <option>A+</option><option>A-</option>
+                        <option>B+</option><option>B-</option>
+                        <option>AB+</option><option>AB-</option>
+                        <option>O+</option><option>O-</option>
+                      </select>
+                    </div>
+                  </div>
+                </div><!-- /identity -->
+
+                <!-- Section 2: Family -->
+                <div class="section-panel">
+                  <div class="section-head">
+                    <div class="section-icon si-green"
+                      aria-hidden="true">👨‍👩‍👦</div>
+                    <div>
+                      <div class="section-label">Family & Guardian</div>
+                      <div class="section-sub">Parent and guardian details</div>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fFatherName">Father's Name</label>
+                      <input type="text" id="fFatherName"
+                        placeholder="Father's full name" maxlength="150" />
+                    </div>
+                    <div class="field">
+                      <label for="fMotherName">Mother's Name</label>
+                      <input type="text" id="fMotherName"
+                        placeholder="Mother's full name" maxlength="150" />
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fGuardianName">Guardian Name</label>
+                      <input type="text" id="fGuardianName"
+                        placeholder="Guardian full name" maxlength="150" />
+                    </div>
+                    <div class="field">
+                      <label for="fGuardianRelation">Guardian Relation</label>
+                      <input type="text" id="fGuardianRelation"
+                        placeholder="e.g. Uncle, Grandparent" maxlength="60" />
+                    </div>
+                  </div>
+                </div><!-- /family -->
+
+                <!-- Section 3: Contact & Aadhaar -->
+                <div class="section-panel">
+                  <div class="section-head">
+                    <div class="section-icon si-amber"
+                      aria-hidden="true">📞</div>
+                    <div>
+                      <div class="section-label">Contact &amp; ID
+                        Documents</div>
+                      <div class="section-sub">Phone, Aadhaar, address</div>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field" id="fw-contact">
+                      <label for="fContactNo">Contact Number <span class="req"
+                          aria-label="required">*</span></label>
+                      <input type="tel" id="fContactNo"
+                        placeholder="e.g. +91 98765 43210" maxlength="20"
+                        inputmode="tel" />
+                      <span class="field-err" role="alert">Enter a valid phone
+                        number (7–20 digits).</span>
+                    </div>
+                    <div class="field" id="fw-aadhaar">
+                      <label for="fAadhaarNo">Aadhaar Number</label>
+                      <input type="text" id="fAadhaarNo"
+                        placeholder="XXXX-XXXX-XXXX" maxlength="14"
+                        inputmode="numeric" />
+                      <span class="field-err" role="alert">Aadhaar must be 12
+                        digits (unique).</span>
+                      <span class="field-hint">Stored masked · Format:
+                        XXXX-XXXX-1234</span>
+                    </div>
+                  </div>
+
+                  <div class="field" id="fw-address">
+                    <label for="fAddress">Full Address</label>
+                    <textarea id="fAddress"
+                      placeholder="House/Village, District, State, PIN"
+                      maxlength="800" rows="3"></textarea>
+                  </div>
+                </div><!-- /contact -->
+
+                <!-- Section 4: Academic -->
+                <div class="section-panel">
+                  <div class="section-head">
+                    <div class="section-icon si-violet"
+                      aria-hidden="true">🎓</div>
+                    <div>
+                      <div class="section-label">Academic Information</div>
+                      <div class="section-sub">Session, stream, school
+                        details</div>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fSession">Session</label>
+                      <input type="text" id="fSession"
+                        placeholder="e.g. 2024-25" maxlength="60"
+                        list="sessionList" />
+                      <datalist id="sessionList">
+                        <option value="2023-24" /><option
+                          value="2024-25" /><option value="2025-26" />
+                      </datalist>
+                    </div>
+                    <div class="field">
+                      <label for="fAcademicYear">Academic Year</label>
+                      <input type="text" id="fAcademicYear"
+                        placeholder="e.g. 2024" maxlength="20" />
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="fStream">Stream</label>
+                      <select id="fStream">
+                        <option value>— Select —</option>
+                        <option value="Science">Science</option>
+                        <option value="Commerce">Commerce</option>
+                        <option value="Arts / Humanities">Arts /
+                          Humanities</option>
+                        <option value="Vocational">Vocational</option>
+                        <option value="General">General</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="fSchoolName">School / Institution</label>
+                      <input type="text" id="fSchoolName"
+                        placeholder="School name" maxlength="150" />
+                    </div>
+                  </div>
+
+                  <!-- Subjects (multi-select checkboxes) -->
+                  <div class="field">
+                    <label>Subjects</label>
+                    <div id="subjectContainer"
+                      style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-md);padding:12px;"
+                      role="group" aria-label="Select subjects">
+                      <!-- Rendered by JS -->
+                    </div>
+                    <input type="hidden" id="fSubjects" />
+                    <span class="field-hint">Select one or more subjects.</span>
+                  </div>
+                </div><!-- /academic -->
+
+                <!-- Form actions -->
+                <div class="form-actions">
+                  <button type="button" class="btn btn-neutral"
+                    id="cancelFormBtn"
+                    aria-label="Cancel and go back">Cancel</button>
+                  <button type="reset" class="btn btn-ghost" id="resetFormBtn"
+                    aria-label="Reset form">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2" aria-hidden="true"><polyline
+                        points="1,4 1,10 7,10" /><path
+                        d="M3.51 15a9 9 0 1 0 .49-5H1" /></svg>
+                    Reset
+                  </button>
+                  <button type="submit" class="btn btn-gradient" id="submitBtn"
+                    style="flex:2;" aria-label="Save student record">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.5" aria-hidden="true"><polyline
+                        points="20,6 9,17 4,12" /></svg>
+                    <span id="submitBtnLabel">Save Student</span>
+                  </button>
+                </div>
+
+              </div><!-- /right -->
+            </div><!-- /form-cols -->
+          </form>
+        </div><!-- /form-card -->
+      </main><!-- #pageReg -->
+
+    </div><!-- .dash-wrap -->
+
+    <!-- ══════════════════════════════════════════
+     TOAST
+══════════════════════════════════════════ -->
+    <div class="toast" id="toast" role="alert" aria-live="assertive">
+      <span class="toast-icon" id="toastIcon" aria-hidden="true"></span>
+      <span id="toastMsg"></span>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════ -->
+
+    <!-- Delete confirmation modal -->
+    <div class="modal-backdrop" id="deleteModal" role="dialog" aria-modal="true"
+      aria-labelledby="deleteModalTitle">
+      <div class="modal-box">
+        <button class="modal-close-btn" data-close="deleteModal"
+          aria-label="Close">✕</button>
+        <div class="modal-icon danger" aria-hidden="true">🗑️</div>
+        <div class="modal-title" id="deleteModalTitle">Delete Student?</div>
+        <div class="modal-desc">This action is <strong>permanent</strong> and
+          cannot be undone. The student record and photo will be removed.</div>
+        <code class="modal-subject" id="deleteStudentName"
+          aria-live="polite"></code>
+        <div style="display:flex;gap:10px;margin-bottom:12px;">
+          <button class="btn btn-amber btn-sm"
+            style="flex:1;justify-content:center;" id="softDeleteBtn">Archive
+            (Soft Delete)</button>
+          <button class="btn btn-danger-solid btn-sm"
+            style="flex:1;justify-content:center;" id="hardDeleteBtn">Remove
+            Permanently</button>
+        </div>
+        <button class="btn btn-ghost btn-full"
+          data-close="deleteModal">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Bulk delete modal -->
+    <div class="modal-backdrop" id="bulkDeleteModal" role="dialog"
+      aria-modal="true" aria-labelledby="bulkDeleteModalTitle">
+      <div class="modal-box">
+        <button class="modal-close-btn" data-close="bulkDeleteModal"
+          aria-label="Close">✕</button>
+        <div class="modal-icon danger" aria-hidden="true">🗑️</div>
+        <div class="modal-title" id="bulkDeleteModalTitle">Delete Selected
+          Students?</div>
+        <div class="modal-desc" id="bulkDeleteDesc">This will permanently delete
+          the selected records.</div>
+        <div class="modal-actions">
+          <button class="btn btn-neutral"
+            data-close="bulkDeleteModal">Cancel</button>
+          <button class="btn btn-danger-solid" id="confirmBulkDeleteBtn"
+            aria-label="Confirm bulk delete">Delete All Selected</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clear all modal -->
+    <div class="modal-backdrop" id="clearAllModal" role="dialog"
+      aria-modal="true" aria-labelledby="clearAllModalTitle">
+      <div class="modal-box">
+        <button class="modal-close-btn" data-close="clearAllModal"
+          aria-label="Close">✕</button>
+        <div class="modal-icon danger" aria-hidden="true">⚠️</div>
+        <div class="modal-title" id="clearAllModalTitle">Clear All
+          Students?</div>
+        <div class="modal-desc">This will <strong>permanently erase every
+            student record</strong> in the database. This cannot be undone. Type
+          <code
+            style="background:var(--surface2);padding:2px 6px;border-radius:4px;">DELETE
+            ALL</code> to confirm.</div>
+        <div class="field" style="margin-bottom:16px;">
+          <input type="text" id="clearAllConfirmInput"
+            placeholder="Type DELETE ALL" maxlength="20"
+            aria-label="Type DELETE ALL to confirm" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-neutral"
+            data-close="clearAllModal">Cancel</button>
+          <button class="btn btn-danger-solid" id="confirmClearAllBtn" disabled
+            aria-label="Confirm clear all">Yes, Delete Everything</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export modal (progress) -->
+    <div class="modal-backdrop" id="exportModal" role="dialog" aria-modal="true"
+      aria-labelledby="exportModalTitle">
+      <div class="modal-box" style="text-align:center;">
+        <div class="modal-icon info" aria-hidden="true">📊</div>
+        <div class="modal-title" id="exportModalTitle">Exporting Records…</div>
+        <p class="modal-desc" id="exportStatus" aria-live="polite">Preparing
+          data…</p>
+        <div
+          style="height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:16px;">
+          <div id="exportProgress"
+            style="height:100%;width:0%;background:linear-gradient(90deg,var(--indigo),var(--violet));border-radius:99px;transition:width 0.4s ease;"
+            role="progressbar" aria-valuenow="0" aria-valuemin="0"
+            aria-valuemax="100"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import modal (progress) -->
+    <div class="modal-backdrop" id="importModal" role="dialog" aria-modal="true"
+      aria-labelledby="importModalTitle">
+      <div class="modal-box" style="text-align:center;">
+        <div class="modal-icon success" aria-hidden="true">📥</div>
+        <div class="modal-title" id="importModalTitle">Importing Records…</div>
+        <p class="modal-desc" id="importStatus" aria-live="polite">Reading
+          file…</p>
+        <div
+          style="height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:16px;">
+          <div id="importProgress"
+            style="height:100%;width:0%;background:linear-gradient(90deg,var(--emerald),var(--teal));border-radius:99px;transition:width 0.4s ease;"
+            role="progressbar" aria-valuenow="0" aria-valuemin="0"
+            aria-valuemax="100"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sign-out confirmation -->
+    <div class="modal-backdrop" id="signOutModal" role="dialog"
+      aria-modal="true" aria-labelledby="signOutModalTitle">
+      <div class="modal-box">
+        <button class="modal-close-btn" data-close="signOutModal"
+          aria-label="Close">✕</button>
+        <div class="modal-icon warning" aria-hidden="true">👋</div>
+        <div class="modal-title" id="signOutModalTitle">Sign Out?</div>
+        <div class="modal-desc">You'll be taken back to the login page.</div>
+        <div class="modal-actions">
+          <button class="btn btn-neutral"
+            data-close="signOutModal">Cancel</button>
+          <button class="btn btn-danger" id="confirmSignOutBtn"
+            aria-label="Confirm sign out">Sign Out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW Student modal -->
+    <div class="modal-backdrop modal-xl" id="viewModal" role="dialog"
+      aria-modal="true" aria-labelledby="viewStudentName">
+      <div class="modal-box">
+        <button class="modal-close-btn" data-close="viewModal"
+          aria-label="Close">✕</button>
+        <div class="view-modal-header">
+          <div class="view-photo-wrap" aria-label="Student photo">
+            <img id="viewPhoto" alt="Student photo" style="display:none;" />
+            <div class="view-ph-icon" id="viewPhIcon"
+              aria-hidden="true">🎓</div>
+          </div>
+          <div class="view-name" id="viewStudentName"></div>
+          <div class="view-id-sub" id="viewStudentSub"></div>
+
+          <!-- Profile tabs -->
+          <div class="view-tabs" role="tablist"
+            aria-label="Student profile tabs">
+            <div class="view-tab active" data-tab="identity" role="tab"
+              aria-selected="true" tabindex="0">🪪 Identity</div>
+            <div class="view-tab" data-tab="family" role="tab"
+              aria-selected="false" tabindex="-1">👨‍👩‍👦 Family</div>
+            <div class="view-tab" data-tab="academic" role="tab"
+              aria-selected="false" tabindex="-1">🎓 Academic</div>
+            <div class="view-tab" data-tab="contact" role="tab"
+              aria-selected="false" tabindex="-1">📞 Contact</div>
+          </div>
+        </div>
+
+        <!-- Tab panels -->
+        <div class="view-body">
+
+          <div class="view-panel active" id="viewTab-identity" role="tabpanel">
+            <div class="view-grid">
+              <div class="view-item"><div class="view-label">Student
+                  ID</div><div class="view-val" id="vStudentId">—</div></div>
+              <div class="view-item"><div class="view-label">Roll No.</div><div
+                  class="view-val" id="vRollNo">—</div></div>
+              <div class="view-item"><div class="view-label">Gender</div><div
+                  class="view-val" id="vGender">—</div></div>
+              <div class="view-item"><div class="view-label">Date of
+                  Birth</div><div class="view-val" id="vDob">—</div></div>
+              <div class="view-item"><div class="view-label">Blood
+                  Group</div><div class="view-val"
+                  id="vBloodGroup">—</div></div>
+              <div class="view-item"><div class="view-label">Aadhaar
+                  No.</div><div class="view-val" id="vAadhaar">—</div></div>
+            </div>
+          </div>
+
+          <div class="view-panel" id="viewTab-family" role="tabpanel">
+            <div class="view-grid">
+              <div class="view-item"><div class="view-label">Father's
+                  Name</div><div class="view-val" id="vFather">—</div></div>
+              <div class="view-item"><div class="view-label">Mother's
+                  Name</div><div class="view-val" id="vMother">—</div></div>
+              <div class="view-item"><div class="view-label">Guardian
+                  Name</div><div class="view-val" id="vGuardian">—</div></div>
+              <div class="view-item"><div class="view-label">Guardian
+                  Relation</div><div class="view-val"
+                  id="vGuardianRel">—</div></div>
+              <div class="view-item"><div class="view-label">Contact
+                  No.</div><div class="view-val" id="vContact">—</div></div>
+              <div class="view-item full"><div
+                  class="view-label">Address</div><div class="view-val"
+                  id="vAddress">—</div></div>
+            </div>
+          </div>
+
+          <div class="view-panel" id="viewTab-academic" role="tabpanel">
+            <div class="view-grid">
+              <div class="view-item"><div class="view-label">Class</div><div
+                  class="view-val" id="vClass">—</div></div>
+              <div class="view-item"><div class="view-label">Section</div><div
+                  class="view-val" id="vSection">—</div></div>
+              <div class="view-item"><div class="view-label">Session</div><div
+                  class="view-val" id="vSession">—</div></div>
+              <div class="view-item"><div class="view-label">Academic
+                  Year</div><div class="view-val" id="vAcadYear">—</div></div>
+              <div class="view-item"><div class="view-label">Stream</div><div
+                  class="view-val" id="vStream">—</div></div>
+              <div class="view-item"><div class="view-label">School</div><div
+                  class="view-val" id="vSchool">—</div></div>
+              <div class="view-item full"><div
+                  class="view-label">Subjects</div><div class="view-val"
+                  id="vSubjects">—</div></div>
+            </div>
+          </div>
+
+          <div class="view-panel" id="viewTab-contact" role="tabpanel">
+            <div class="view-grid">
+              <div class="view-item"><div class="view-label">Created</div><div
+                  class="view-val" id="vCreatedAt">—</div></div>
+              <div class="view-item"><div class="view-label">Last
+                  Updated</div><div class="view-val"
+                  id="vUpdatedAt">—</div></div>
+              <div class="view-item"><div class="view-label">Status</div><div
+                  class="view-val" id="vStatus">—</div></div>
+              <div class="view-item"><div class="view-label">Drive
+                  Sync</div><div class="view-val" id="vDriveSync">—</div></div>
+            </div>
+          </div>
+
+        </div><!-- /view-body -->
+
+        <div class="view-actions">
+          <button class="btn btn-amber btn-sm" id="viewEditBtn"
+            aria-label="Edit this student">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" aria-hidden="true"><path
+                d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path
+                d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+            Edit
+          </button>
+          <button class="btn btn-danger btn-sm" id="viewDeleteBtn"
+            aria-label="Delete this student">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" aria-hidden="true"><polyline
+                points="3,6 5,6 21,6" /><path
+                d="M19 6v14H5V6m3 0V4h8v2" /></svg>
+            Delete
+          </button>
+          <button class="btn btn-ghost btn-sm"
+            data-close="viewModal">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+     FIREBASE SDKs (v9 compat)
+══════════════════════════════════════════ -->
+    <script
+      src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script
+      src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script
+      src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script
+      src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+    <!-- App scripts (order matters) -->
+    <script src="assets/js/firebase/config.js"></script>
+    <script src="assets/js/utils/helpers.js"></script>
+    <script src="assets/js/utils/security.js"></script>
+    <script src="assets/js/services/auth.service.js"></script>
+    <script src="assets/js/services/student.service.js"></script>
+    <script src="assets/js/services/drive.service.js"></script>
+
+    <script>
+'use strict';
+
+/* ══════════════════════════════════════════
+   DASHBOARD CONTROLLER
+   Manages all UI state, data binding,
+   table rendering, form logic, modals
+══════════════════════════════════════════ */
+
+/* ── Constants ──────────────────────────── */
+const SUBJECTS_LIST = [
+  'Mathematics','Physics','Chemistry','Biology',
+  'English','Hindi','Bengali','History',
+  'Geography','Civics','Economics','Accountancy',
+  'Business Studies','Computer Science','Political Science',
+  'Sociology','Psychology','Philosophy','Physical Education',
+  'Fine Arts','Music','Sanskrit','Environmental Science'
+];
+
+/* ── State ──────────────────────────────── */
+let _allStudents   = [];   // full dataset from Firestore listener
+let _filtered      = [];   // after search/filter
+let _currentPage   = 1;
+let _perPage       = 50;
+let _sortField     = 'createdAt';
+let _sortDir       = 'desc';
+let _searchQuery   = '';
+let _filterClass   = '';
+let _filterSection = '';
+let _filterStatus  = '';
+let _selectedIds   = new Set();
+let _editDocId     = null; // null = add mode, string = edit mode
+let _photoDataUrl  = '';   // current photo (base64)
+let _stream        = null; // MediaStream for camera
+let _facingMode    = 'environment'; // or 'user'
+let _viewDocId     = null; // currently viewed student docId
+
+/* ── DOM refs (cached for perf) ─────────── */
+const $ = id => document.getElementById(id);
+const dom = {
+  pageMain:         $('pageMain'),
+  pageReg:          $('pageReg'),
+  studentTbody:     $('studentTbody'),
+  searchInput:      $('searchInput'),
+  navSearch:        $('navSearch'),
+  searchClearBtn:   $('searchClearBtn'),
+  filterClass:      $('filterClass'),
+  filterSection:    $('filterSection'),
+  filterStatus:     $('filterStatus'),
+  sortField:        $('sortField'),
+  sortDir:          $('sortDir'),
+  perPage:          $('perPage'),
+  selectAll:        $('selectAll'),
+  bulkBar:          $('bulkBar'),
+  bulkCount:        $('bulkCount'),
+  resultCount:      $('resultCount'),
+  pageControls:     $('pageControls'),
+  exportProgress:   $('exportProgress'),
+  importProgress:   $('importProgress'),
+  clearAllConfirm:  $('clearAllConfirmInput'),
+  confirmClearAll:  $('confirmClearAllBtn'),
+  subjectContainer: $('subjectContainer'),
+  // form fields
+  fName:            $('fName'),
+  fStudentId:       $('fStudentId'),
+  fClass:           $('fClass'),
+  fSection:         $('fSection'),
+  fRollNo:          $('fRollNo'),
+  fGender:          $('fGender'),
+  fDob:             $('fDob'),
+  fBloodGroup:      $('fBloodGroup'),
+  fFatherName:      $('fFatherName'),
+  fMotherName:      $('fMotherName'),
+  fGuardianName:    $('fGuardianName'),
+  fGuardianRelation:$('fGuardianRelation'),
+  fContactNo:       $('fContactNo'),
+  fAadhaarNo:       $('fAadhaarNo'),
+  fAddress:         $('fAddress'),
+  fSession:         $('fSession'),
+  fAcademicYear:    $('fAcademicYear'),
+  fStream:          $('fStream'),
+  fSchoolName:      $('fSchoolName'),
+  fSubjects:        $('fSubjects'),
+  // camera / photo
+  video:            $('video'),
+  camPlaceholder:   $('camPlaceholder'),
+  startCamBtn:      $('startCamBtn'),
+  captureBtn:       $('captureBtn'),
+  stopCamBtn:       $('stopCamBtn'),
+  rotateCamBtn:     $('rotateCamBtn'),
+  fileUpload:       $('fileUpload'),
+  previewImage:     $('previewImage'),
+  noPhPlaceholder:  $('noPhPlaceholder'),
+  uploadZone:       $('uploadZone'),
+};
+
+/* ════════════════════════════════════════
+   BOOT — auth guard + initialise
+════════════════════════════════════════ */
+(function boot() {
+  initFirebase();
+  initTheme();
+  $('themeIcon').textContent = (localStorage.getItem('sms_theme') || 'dark') === 'dark' ? '🌙' : '☀️';
+  initModalListeners();
+  buildSubjectCheckboxes();
+  bindEvents();
+
+  AuthService.onAuthStateChanged((user, role) => {
+    if (!user) { window.location.replace('login.html'); return; }
+
+    // Set nav user info
+    const displayName = user.displayName || user.email || 'Admin';
+    $('userName').textContent = displayName.split(' ')[0];
+    $('userAvatar').textContent = displayName.charAt(0).toUpperCase();
+
+    // Start real-time listeners
+    startStatsListener();
+    startStudentsListener();
+    populateFilterDropdowns();
+  });
+})();
+
+/* ════════════════════════════════════════
+   EVENT BINDING
+════════════════════════════════════════ */
+function bindEvents() {
+  // Nav
+  $('themeToggleBtn').addEventListener('click', () => {
+    toggleTheme();
+    $('themeIcon').textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️';
+  });
+  $('signOutBtn').addEventListener('click', () => openModal('signOutModal'));
+  $('confirmSignOutBtn').addEventListener('click', async () => {
+    await AuthService.signOut();
+    window.location.replace('login.html');
+  });
+
+  // Dual search (nav + toolbar sync)
+  const handleSearch = debounce(q => {
+    _searchQuery = q.trim();
+    _currentPage = 1;
+    dom.searchInput.value = q;
+    dom.navSearch.value   = q;
+    dom.searchClearBtn.style.display = q ? 'block' : 'none';
+    renderTable();
+  }, 280);
+  dom.searchInput.addEventListener('input', e => handleSearch(e.target.value));
+  dom.navSearch.addEventListener('input', e => handleSearch(e.target.value));
+  dom.searchClearBtn.addEventListener('click', () => { handleSearch(''); });
+
+  // Filters
+  dom.filterClass.addEventListener('change', e => { _filterClass = e.target.value; _currentPage = 1; renderTable(); });
+  dom.filterSection.addEventListener('change', e => { _filterSection = e.target.value; _currentPage = 1; renderTable(); });
+  dom.filterStatus.addEventListener('change', e => { _filterStatus = e.target.value; _currentPage = 1; renderTable(); });
+  dom.sortField.addEventListener('change', e => { _sortField = e.target.value; _currentPage = 1; renderTable(); });
+  dom.sortDir.addEventListener('change', e => { _sortDir = e.target.value; _currentPage = 1; renderTable(); });
+  dom.perPage.addEventListener('change', e => { _perPage = Number(e.target.value); _currentPage = 1; renderTable(); });
+
+  // Table header sort on click
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const f = th.dataset.sort;
+      if (_sortField === f) { _sortDir = _sortDir === 'asc' ? 'desc' : 'asc'; }
+      else { _sortField = f; _sortDir = 'asc'; }
+      dom.sortField.value = _sortField;
+      dom.sortDir.value = _sortDir;
+      _currentPage = 1;
+      renderTable();
+    });
+  });
+
+  // Select all
+  dom.selectAll.addEventListener('change', e => {
+    const pageIds = getPageStudents().map(s => s._docId);
+    if (e.target.checked) { pageIds.forEach(id => _selectedIds.add(id)); }
+    else { pageIds.forEach(id => _selectedIds.delete(id)); }
+    updateBulkBar();
+    renderTable();
+  });
+
+  // Bulk actions
+  $('bulkExportBtn').addEventListener('click', () => {
+    const sel = _allStudents.filter(s => _selectedIds.has(s._docId));
+    ExportService.exportToExcel(sel, DriveService.isConnected());
+  });
+  $('bulkDeleteBtn').addEventListener('click', () => {
+    $('bulkDeleteDesc').textContent = `Permanently delete ${_selectedIds.size} selected student(s)?`;
+    openModal('bulkDeleteModal');
+  });
+  $('confirmBulkDeleteBtn').addEventListener('click', async () => {
+    closeModal('bulkDeleteModal');
+    const ids = [..._selectedIds];
+    $('confirmBulkDeleteBtn').disabled = true;
+    const result = await StudentService.bulkDelete(ids);
+    if (result.ok) {
+      _selectedIds.clear();
+      updateBulkBar();
+      showToast('success', '✅', `${ids.length} record(s) deleted.`);
+    } else {
+      showToast('error', '❌', result.msg);
+    }
+    $('confirmBulkDeleteBtn').disabled = false;
+  });
+  $('bulkClearBtn').addEventListener('click', () => { _selectedIds.clear(); updateBulkBar(); renderTable(); });
+
+  // Toolbar buttons
+  $('addStudentBtn').addEventListener('click', () => showRegPage(null));
+  $('exportBtn').addEventListener('click', () => {
+    ExportService.exportToExcel(_filtered, DriveService.isConnected());
+  });
+  $('clearAllBtn').addEventListener('click', () => { $('clearAllConfirmInput').value = ''; openModal('clearAllModal'); });
+  $('importBtn').addEventListener('click', () => dom.fileUpload.parentNode.querySelector('#importFile') ? $('importFile').click() : $('importFile')?.click());
+  $('importFile') && $('importFile').addEventListener('change', handleImport);
+  $('refreshBtn').addEventListener('click', () => { populateFilterDropdowns(); showToast('info', '🔄', 'Refreshed.'); });
+
+  // Clear all confirm input gating
+  dom.clearAllConfirm.addEventListener('input', e => {
+    dom.confirmClearAll.disabled = e.target.value !== 'DELETE ALL';
+  });
+  dom.confirmClearAll.addEventListener('click', async () => {
+    closeModal('clearAllModal');
+    const result = await StudentService.deleteAll();
+    if (result.ok) { showToast('success', '✅', 'All records deleted.'); }
+    else { showToast('error', '❌', result.msg); }
+  });
+
+  // Form navigation
+  $('backToListBtn').addEventListener('click', () => showDashboard());
+  $('cancelFormBtn').addEventListener('click', () => showDashboard());
+  $('resetFormBtn').addEventListener('click', () => { resetForm(); });
+
+  // Form submission
+  $('studentForm').addEventListener('submit', handleFormSubmit);
+
+  // Photo / camera
+  $('startCamBtn').addEventListener('click', startCamera);
+  $('stopCamBtn').addEventListener('click', stopCamera);
+  $('captureBtn').addEventListener('click', capturePhoto);
+  $('rotateCamBtn').addEventListener('click', rotateCamera);
+  $('clearPhotoBtn').addEventListener('click', clearPhoto);
+  dom.fileUpload.addEventListener('change', handleFileUpload);
+  dom.uploadZone.addEventListener('click', () => dom.fileUpload.click());
+  dom.uploadZone.addEventListener('keypress', e => { if (e.key === 'Enter') dom.fileUpload.click(); });
+  dom.uploadZone.addEventListener('dragover', e => { e.preventDefault(); dom.uploadZone.style.borderColor = 'var(--indigo)'; });
+  dom.uploadZone.addEventListener('dragleave', () => { dom.uploadZone.style.borderColor = ''; });
+  dom.uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dom.uploadZone.style.borderColor = '';
+    const file = e.dataTransfer.files[0];
+    if (file) processImageFile(file);
+  });
+
+  // Drive button
+  $('driveBtn').addEventListener('click', async () => {
+    if (DriveService.isConnected()) { DriveService.disconnect(); updateDriveUI(false); }
+    else { const ok = await DriveService.connect(); updateDriveUI(ok); }
+  });
+
+  // View modal tabs
+  document.querySelectorAll('.view-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchViewTab(tab.dataset.tab));
+    tab.addEventListener('keydown', e => { if (e.key === 'Enter') switchViewTab(tab.dataset.tab); });
+  });
+  $('viewEditBtn').addEventListener('click', () => { closeModal('viewModal'); showRegPage(_viewDocId); });
+  $('viewDeleteBtn').addEventListener('click', () => { closeModal('viewModal'); openDeleteModal(_viewDocId); });
+}
+
+/* ════════════════════════════════════════
+   FIRESTORE LISTENERS
+════════════════════════════════════════ */
+function startStatsListener() {
+  StudentService.subscribeStats(stats => {
+    animateNumber('statTotal',   stats.total);
+    animateNumber('statActive',  stats.active);
+    animateNumber('statDeleted', stats.deleted);
+    $('statTotalPill').textContent  = `${stats.total} total`;
+    $('statActivePill').textContent = `${stats.active} active`;
+    $('lastUpdated').textContent    = `Last refreshed: ${new Date().toLocaleTimeString('en-IN')} · ${stats.total} records`;
+  });
+}
+
+function startStudentsListener() {
+  showSkeleton(dom.studentTbody, 20, 8);
+
+  StudentService.subscribeStudents({
+    orderBy:  _sortField,
+    orderDir: _sortDir,
+    limit:    10000
+  }, (docs) => {
+    _allStudents = docs;
+    _currentPage = 1;
+    renderTable();
+    populateFilterDropdowns();
+  });
+}
+
+/* ════════════════════════════════════════
+   TABLE RENDER ENGINE
+════════════════════════════════════════ */
+function renderTable() {
+  updateSortHeaders();
+
+  // Filter
+  _filtered = _allStudents.filter(s => {
+    if (_filterClass   && s.className !== _filterClass)   return false;
+    if (_filterSection && s.section   !== _filterSection) return false;
+    if (_filterStatus === 'active'  && s.isActive === false) return false;
+    if (_filterStatus === 'deleted' && s.isActive !== false) return false;
+    if (_searchQuery) {
+      const q = _searchQuery.toLowerCase();
+      return [s.name, s.studentId, s.rollNo, s.fatherName, s.motherName,
+              s.contactNo, s.className, s.section, s.stream, s.subjects,
+              s.aadhaarNo, s.bloodGroup, s.session, s.academicYear, s.schoolName]
+        .some(v => (v || '').toLowerCase().includes(q));
+    }
+    return true;
+  });
+
+  // Sort
+  _filtered.sort((a, b) => {
+    let av = a[_sortField] ?? '';
+    let bv = b[_sortField] ?? '';
+    // Handle Firestore Timestamps
+    if (av?.toDate) av = av.toDate().getTime();
+    if (bv?.toDate) bv = bv.toDate().getTime();
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return _sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return _sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  dom.resultCount.textContent = `${_filtered.length} result${_filtered.length !== 1 ? 's' : ''}`;
+
+  // Pagination
+  const total = _filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / _perPage));
+  if (_currentPage > totalPages) _currentPage = totalPages;
+
+  const start = (_currentPage - 1) * _perPage;
+  const end   = Math.min(start + _perPage, total);
+
+  $('pageFrom').textContent  = total ? start + 1 : 0;
+  $('pageTo').textContent    = end;
+  $('pageTotal').textContent = total;
+
+  renderPageControls(totalPages);
+  renderRows(_filtered.slice(start, end));
+  updateSelectAllState();
+}
+
+function getPageStudents() {
+  const total = _filtered.length;
+  const start = (_currentPage - 1) * _perPage;
+  const end   = Math.min(start + _perPage, total);
+  return _filtered.slice(start, end);
+}
+
+function renderRows(students) {
+  if (!students.length) {
+    dom.studentTbody.innerHTML = `
+      <tr class="empty-state-row">
+        <td colspan="20">
+          <div class="empty-state">
+            <div class="empty-icon" aria-hidden="true">🎓</div>
+            <p>No students found</p>
+            <span>${_searchQuery || _filterClass || _filterSection ? 'Try adjusting your search or filters.' : 'Add your first student to get started.'}</span>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  const q = _searchQuery;
+  const rows = students.map(s => {
+    const isSelected = _selectedIds.has(s._docId);
+    const isDeleted  = s.isActive === false;
+
+    const photoCell = s.photoUrl
+      ? `<img src="${Security.esc(s.photoUrl)}" class="student-photo" alt="${Security.esc(s.name)}" loading="lazy" />`
+      : `<div class="photo-ph" aria-hidden="true">🎓</div>`;
+
+    const aadhaarDisplay = s.aadhaarNo ? Security.maskAadhaar(s.aadhaarNo) : '—';
+
+    return `
+      <tr data-id="${Security.esc(s._docId)}" class="${isSelected ? 'selected' : ''}${isDeleted ? '' : ''}">
+        <td class="td-check">
+          <input type="checkbox" class="row-check" aria-label="Select ${Security.esc(s.name)}" ${isSelected ? 'checked' : ''} />
+        </td>
+        <td class="td-photo">${photoCell}</td>
+        <td class="td-name">
+          <div class="nm">${hlText(s.name, q)}</div>
+          <div class="sid">${hlText(s.studentId, q)}</div>
+          ${isDeleted ? '<span class="badge badge-blood" style="margin-top:2px;">Deleted</span>' : ''}
+        </td>
+        <td>${s.className ? `<span class="badge badge-class">${Security.esc(s.className)}</span>` : '—'}</td>
+        <td>${s.section  ? `<span class="badge badge-section">${Security.esc(s.section)}</span>` : '—'}</td>
+        <td>${Security.esc(s.rollNo) || '—'}</td>
+        <td class="truncate" style="max-width:130px;" title="${Security.esc(s.fatherName)}">${hlText(s.fatherName, q) || '—'}</td>
+        <td class="truncate" style="max-width:130px;" title="${Security.esc(s.motherName)}">${hlText(s.motherName, q) || '—'}</td>
+        <td class="truncate" style="max-width:120px;" title="${Security.esc(s.guardianName)}">${Security.esc(s.guardianName) || '—'}</td>
+        <td>${hlText(s.contactNo, q) || '—'}</td>
+        <td style="font-size:11px;letter-spacing:0.5px;">${aadhaarDisplay}</td>
+        <td style="font-weight:700;">${hlText(s.studentId, q) || '—'}</td>
+        <td>${s.bloodGroup ? `<span class="badge badge-blood">${Security.esc(s.bloodGroup)}</span>` : '—'}</td>
+        <td>${s.session ? `<span class="badge badge-session">${Security.esc(s.session)}</span>` : '—'}</td>
+        <td>${Security.esc(s.academicYear) || '—'}</td>
+        <td class="addr-cell truncate" title="${Security.esc(s.address)}">${Security.esc(s.address) || '—'}</td>
+        <td>${s.stream ? `<span class="badge badge-stream">${Security.esc(s.stream)}</span>` : '—'}</td>
+        <td class="subj-cell truncate" title="${Security.esc(s.subjects)}">${Security.esc(s.subjects) || '—'}</td>
+        <td class="no-wrap text-sm text-muted2">${formatDate(s.createdAt)}</td>
+        <td>
+          <div class="action-cell">
+            <button class="act-btn view-btn" data-id="${Security.esc(s._docId)}" title="View profile" aria-label="View ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button class="act-btn edit edit-btn" data-id="${Security.esc(s._docId)}" title="Edit record" aria-label="Edit ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="act-btn del del-btn" data-id="${Security.esc(s._docId)}" data-name="${Security.esc(s.name)}" title="Delete record" aria-label="Delete ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14H5V6m3 0V4h8v2"/></svg>
+            </button>
+             <button class="act-btn drive-dl-btn" data-id="${Security.esc(s._docId)}" title="Download photo & save to Drive" aria-label="Save ${Security.esc(s.name)} to Drive" style="color:var(--indigo);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 17H12l-5-9h10l5 9z"/><path d="M2 17l5-9"/><path d="M12 17l-5-9"/><line x1="12" y1="21" x2="12" y2="14"/><polyline points="9,17 12,14 15,17"/></svg>
+             </button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  dom.studentTbody.innerHTML = rows;
+
+  // Bind per-row events (event delegation pattern)
+  dom.studentTbody.querySelectorAll('.row-check').forEach(cb => {
+    cb.addEventListener('change', e => {
+      const row = cb.closest('tr');
+      const id  = row.dataset.id;
+      if (e.target.checked) { _selectedIds.add(id); row.classList.add('selected'); }
+      else { _selectedIds.delete(id); row.classList.remove('selected'); }
+      updateBulkBar();
+      updateSelectAllState();
+    });
+  });
+
+  dom.studentTbody.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => openViewModal(btn.dataset.id));
+  });
+  dom.studentTbody.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => showRegPage(btn.dataset.id));
+  });
+  dom.studentTbody.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+  });
+  dom.studentTbody.querySelectorAll('.drive-dl-btn').forEach(btn => {
+  btn.addEventListener('click', () => handleDriveDownload(btn.dataset.id));
+});
+}
+
+/* ── Page controls ─────────────────────── */
+function renderPageControls(totalPages) {
+  const pages = buildPageNums(_currentPage, totalPages);
+  let html = `
+    <button class="page-btn" ${_currentPage <= 1 ? 'disabled' : ''} id="prevPageBtn" aria-label="Previous page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="15,18 9,12 15,6"/></svg>
+    </button>`;
+  pages.forEach(p => {
+    if (p === '…') { html += `<span class="page-ellipsis" aria-hidden="true">…</span>`; }
+    else { html += `<button class="page-btn ${p === _currentPage ? 'active' : ''}" data-page="${p}" aria-label="Page ${p}" ${p === _currentPage ? 'aria-current="page"' : ''}>${p}</button>`; }
+  });
+  html += `
+    <button class="page-btn" ${_currentPage >= totalPages ? 'disabled' : ''} id="nextPageBtn" aria-label="Next page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9,18 15,12 9,6"/></svg>
+    </button>`;
+  dom.pageControls.innerHTML = html;
+
+  dom.pageControls.querySelectorAll('[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => { _currentPage = Number(btn.dataset.page); renderTable(); });
+  });
+  dom.pageControls.querySelector('#prevPageBtn')?.addEventListener('click', () => { _currentPage--; renderTable(); });
+  dom.pageControls.querySelector('#nextPageBtn')?.addEventListener('click', () => { _currentPage++; renderTable(); });
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === _sortField) {
+      th.classList.add(_sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+}
+
+function updateSelectAllState() {
+  const pageIds = getPageStudents().map(s => s._docId);
+  const allChecked = pageIds.length > 0 && pageIds.every(id => _selectedIds.has(id));
+  dom.selectAll.checked = allChecked;
+  dom.selectAll.indeterminate = !allChecked && pageIds.some(id => _selectedIds.has(id));
+}
+
+function updateBulkBar() {
+  const n = _selectedIds.size;
+  dom.bulkBar.classList.toggle('show', n > 0);
+  dom.bulkCount.textContent = `${n} selected`;
+}
+
+/* ════════════════════════════════════════
+   FILTER DROPDOWNS — auto-populate
+════════════════════════════════════════ */
+async function populateFilterDropdowns() {
+  try {
+    const [classes, sections] = await Promise.all([
+      StudentService.getDistinctValues('className'),
+      StudentService.getDistinctValues('section')
+    ]);
+    _repopulateSelect(dom.filterClass,   'All Classes',  classes);
+    _repopulateSelect(dom.filterSection, 'All Sections', sections);
+  } catch(e) { console.warn('Filter dropdown error:', e); }
+}
+
+function _repopulateSelect(sel, placeholder, values) {
+  const current = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  values.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    if (v === current) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+/* ════════════════════════════════════════
+   REGISTRATION / EDIT PAGE
+════════════════════════════════════════ */
+function showDashboard() {
+  stopCamera();
+  dom.pageReg.style.display  = 'none';
+  dom.pageMain.style.display = '';
+  window.scrollTo(0, 0);
+}
+
+async function showRegPage(docId) {
+  dom.pageMain.style.display = 'none';
+  dom.pageReg.style.display  = '';
+  window.scrollTo(0, 0);
+
+  resetForm();
+  _editDocId = docId;
+
+  if (docId) {
+    // Edit mode
+    $('regTitle').innerHTML  = 'Edit <em>Student Record</em>';
+    $('regSub').textContent  = 'Update the fields below and save.';
+    $('editBanner').style.display = 'flex';
+    $('submitBtnLabel').textContent = 'Update Student';
+
+    const s = await StudentService.getStudent(docId);
+    if (!s) { showToast('error', '❌', 'Record not found.'); showDashboard(); return; }
+
+    $('editBannerName').textContent = s.name;
+    $('editDocId').value    = s._docId;
+    $('editPhotoPath').value = s.photoPath || '';
+
+    dom.fName.value             = s.name || '';
+    dom.fStudentId.value        = s.studentId || '';
+    dom.fClass.value            = s.className || '';
+    dom.fSection.value          = s.section || '';
+    dom.fRollNo.value           = s.rollNo || '';
+    dom.fGender.value           = s.gender || '';
+    dom.fDob.value              = s.dob || '';
+    dom.fBloodGroup.value       = s.bloodGroup || '';
+    dom.fFatherName.value       = s.fatherName || '';
+    dom.fMotherName.value       = s.motherName || '';
+    dom.fGuardianName.value     = s.guardianName || '';
+    dom.fGuardianRelation.value = s.guardianRelation || '';
+    dom.fContactNo.value        = s.contactNo || '';
+    dom.fAadhaarNo.value        = s.aadhaarNo || '';
+    dom.fAddress.value          = s.address || '';
+    dom.fSession.value          = s.session || '';
+    dom.fAcademicYear.value     = s.academicYear || '';
+    dom.fStream.value           = s.stream || '';
+    dom.fSchoolName.value       = s.schoolName || '';
+
+    // Subjects
+    const subjArr = (s.subjects || '').split(',').map(x => x.trim()).filter(Boolean);
+    dom.subjectContainer.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.checked = subjArr.includes(cb.value);
+    });
+    dom.fSubjects.value = s.subjects || '';
+
+    // Photo
+    if (s.photoUrl) {
+      setPhotoPreview(s.photoUrl, false);
+      _photoDataUrl = ''; // photo already on server, won't re-upload unless changed
+    }
+
+  } else {
+    // Add mode
+    $('regTitle').innerHTML = 'Add <em>New Student</em>';
+    $('regSub').textContent = 'Fill in all required fields.';
+    $('editBanner').style.display = 'none';
+    $('submitBtnLabel').textContent = 'Save Student';
+  }
+}
+
+/* ── Form reset ─────────────────────────── */
+function resetForm() {
+  $('studentForm').reset();
+  _editDocId   = null;
+  _photoDataUrl = '';
+  $('editDocId').value    = '';
+  $('editPhotoPath').value = '';
+
+  // Clear validation states
+  document.querySelectorAll('.field.has-err').forEach(f => f.classList.remove('has-err'));
+
+  // Clear subject checkboxes
+  dom.subjectContainer.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+  dom.fSubjects.value = '';
+
+  // Clear photo preview
+  clearPhoto();
+}
+
+/* ── Build subject checkboxes ──────────── */
+function buildSubjectCheckboxes() {
+  dom.subjectContainer.innerHTML = SUBJECTS_LIST.map(s => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px;border-radius:6px;transition:background 0.12s;"
+           onmouseover="this.style.background='var(--indigo-dim)'" onmouseout="this.style.background=''">
+      <input type="checkbox" value="${Security.esc(s)}" style="accent-color:var(--indigo);" aria-label="Subject: ${Security.esc(s)}" />
+      ${Security.esc(s)}
+    </label>`).join('');
+
+  // Sync to hidden input on change
+  dom.subjectContainer.addEventListener('change', () => {
+    const checked = [...dom.subjectContainer.querySelectorAll('input:checked')].map(c => c.value);
+    dom.fSubjects.value = checked.join(', ');
+  });
+}
+
+/* ── Form submit ────────────────────────── */
+async function handleFormSubmit(e) {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const btn = $('submitBtn');
+  const lbl = $('submitBtnLabel');
+  btn.disabled = true;
+  lbl.textContent = _editDocId ? 'Updating…' : 'Saving…';
+
+  const raw = {
+    name:             dom.fName.value.trim(),
+    studentId:        dom.fStudentId.value.trim(),
+    className:        dom.fClass.value.trim(),
+    section:          dom.fSection.value.trim(),
+    rollNo:           dom.fRollNo.value.trim(),
+    gender:           dom.fGender.value,
+    dob:              dom.fDob.value,
+    bloodGroup:       dom.fBloodGroup.value,
+    fatherName:       dom.fFatherName.value.trim(),
+    motherName:       dom.fMotherName.value.trim(),
+    guardianName:     dom.fGuardianName.value.trim(),
+    guardianRelation: dom.fGuardianRelation.value.trim(),
+    contactNo:        dom.fContactNo.value.trim(),
+    aadhaarNo:        dom.fAadhaarNo.value.trim(),
+    address:          dom.fAddress.value.trim(),
+    session:          dom.fSession.value.trim(),
+    academicYear:     dom.fAcademicYear.value.trim(),
+    stream:           dom.fStream.value,
+    subjects:         dom.fSubjects.value,
+    schoolName:       dom.fSchoolName.value.trim(),
+    photoUrl:         dom.previewImage.style.display !== 'none' ? dom.previewImage.src : '',
+  };
+
+  const data = Security.sanitizeRecord(raw);
+
+  let result;
+  if (_editDocId) {
+    result = await StudentService.updateStudent(_editDocId, data, _photoDataUrl || null, $('editPhotoPath').value);
+  } else {
+    result = await StudentService.addStudent(data, _photoDataUrl || null);
+  }
+
+  btn.disabled = false;
+  lbl.textContent = _editDocId ? 'Update Student' : 'Save Student';
+
+  if (result.ok) {
+    showToast('success', '✅', _editDocId ? 'Record updated successfully.' : 'Student added successfully.');
+
+    // Upload photo to Drive if connected
+    if (DriveService.isConnected() && result.id) {
+      const student = await StudentService.getStudent(result.id || _editDocId);
+      if (student?.photoUrl) {
+        DriveService.uploadStudentPhoto(student);
+        $('driveStatus').classList.add('show');
+        setTimeout(() => $('driveStatus').classList.remove('show'), 4000);
+      }
+    }
+
+    showDashboard();
+  } else {
+    showToast('error', '❌', result.msg || 'Save failed.');
+  }
+}
+
+/* ── Form validation ────────────────────── */
+function validateForm() {
+  let ok = true;
+
+  const fields = [
+    { wrap: 'fw-name',     val: dom.fName.value.trim(),      test: v => v.length > 0 },
+    { wrap: 'fw-studentId',val: dom.fStudentId.value.trim(), test: v => v.length > 0 },
+    { wrap: 'fw-class',    val: dom.fClass.value.trim(),     test: v => v.length > 0 },
+    { wrap: 'fw-contact',  val: dom.fContactNo.value.trim(), test: v => Security.validPhone(v) },
+    { wrap: 'fw-aadhaar',  val: dom.fAadhaarNo.value.trim(), test: v => Security.validAadhaar(v) },
+  ];
+
+  fields.forEach(({ wrap, val, test }) => {
+    const fw = $(wrap);
+    if (!fw) return;
+    if (!test(val)) { fw.classList.add('has-err'); ok = false; }
+    else { fw.classList.remove('has-err'); }
+  });
+
+  if (!ok) {
+    const firstErr = document.querySelector('.field.has-err');
+    firstErr?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  return ok;
+}
+
+/* ════════════════════════════════════════
+   DELETE MODAL
+════════════════════════════════════════ */
+let _deleteTarget = null;
+
+function openDeleteModal(docId) {
+  _deleteTarget = docId;
+  const s = _allStudents.find(x => x._docId === docId);
+  $('deleteStudentName').textContent = s ? `${s.name} — ${s.studentId}` : docId;
+  openModal('deleteModal');
+
+  $('softDeleteBtn').onclick = async () => {
+    closeModal('deleteModal');
+    const r = await StudentService.softDelete(_deleteTarget);
+    if (r.ok) { showToast('info', '🗄️', 'Student archived (soft deleted).'); }
+    else { showToast('error', '❌', r.msg); }
+    _deleteTarget = null;
+  };
+  $('hardDeleteBtn').onclick = async () => {
+    closeModal('deleteModal');
+    const r = await StudentService.hardDelete(_deleteTarget);
+    if (r.ok) { showToast('success', '✅', 'Student permanently deleted.'); }
+    else { showToast('error', '❌', r.msg); }
+    _deleteTarget = null;
+  };
+}
+
+/* ════════════════════════════════════════
+   VIEW STUDENT MODAL
+════════════════════════════════════════ */
+async function openViewModal(docId) {
+  _viewDocId = docId;
+  const s = _allStudents.find(x => x._docId === docId) || await StudentService.getStudent(docId);
+  if (!s) { showToast('error', '❌', 'Record not found.'); return; }
+
+  $('viewStudentName').textContent = s.name || '—';
+  $('viewStudentSub').textContent  = [s.studentId, s.className, s.section].filter(Boolean).join(' · ');
+
+  // Photo
+  if (s.photoUrl) {
+    $('viewPhoto').src          = s.photoUrl;
+    $('viewPhoto').style.display = 'block';
+    $('viewPhIcon').style.display = 'none';
+  } else {
+    $('viewPhoto').style.display = 'none';
+    $('viewPhIcon').style.display = 'flex';
+  }
+
+  // Populate fields
+  const set = (id, val) => { const el = $(id); if(el) el.textContent = val || '—'; };
+  set('vStudentId',  s.studentId);
+  set('vRollNo',     s.rollNo);
+  set('vGender',     s.gender);
+  set('vDob',        s.dob ? formatDate(s.dob) : null);
+  set('vBloodGroup', s.bloodGroup);
+  set('vAadhaar',    s.aadhaarNo ? Security.maskAadhaar(s.aadhaarNo) : null);
+  set('vFather',     s.fatherName);
+  set('vMother',     s.motherName);
+  set('vGuardian',   s.guardianName);
+  set('vGuardianRel',s.guardianRelation);
+  set('vContact',    s.contactNo);
+  set('vAddress',    s.address);
+  set('vClass',      s.className);
+  set('vSection',    s.section);
+  set('vSession',    s.session);
+  set('vAcadYear',   s.academicYear);
+  set('vStream',     s.stream);
+  set('vSchool',     s.schoolName);
+  set('vSubjects',   s.subjects);
+  set('vCreatedAt',  formatDateTime(s.createdAt));
+  set('vUpdatedAt',  formatDateTime(s.updatedAt));
+  $('vStatus').innerHTML = s.isActive === false
+    ? '<span class="badge badge-blood">Deleted / Archived</span>'
+    : '<span class="badge badge-class">Active</span>';
+  $('vDriveSync').innerHTML = DriveService.isConnected()
+    ? '<span class="synced-yes">☁️ Drive connected</span>'
+    : '<span class="synced-no">Not synced</span>';
+
+  switchViewTab('identity');
+  openModal('viewModal');
+}
+
+function switchViewTab(name) {
+  document.querySelectorAll('.view-tab').forEach(t => {
+    const isActive = t.dataset.tab === name;
+    t.classList.toggle('active', isActive);
+    t.setAttribute('aria-selected', String(isActive));
+    t.tabIndex = isActive ? 0 : -1;
+  });
+  document.querySelectorAll('.view-panel').forEach(p => {
+    p.classList.toggle('active', p.id === `viewTab-${name}`);
+  });
+}
+
+/* ════════════════════════════════════════
+   CAMERA
+════════════════════════════════════════ */
+async function startCamera() {
+  try {
+    _stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: _facingMode, width: { ideal: 1280 }, height: { ideal: 960 } }
+    });
+    dom.video.srcObject = _stream;
+    dom.video.style.display    = 'block';
+    dom.camPlaceholder.style.display = 'none';
+    dom.startCamBtn.style.display  = 'none';
+    dom.captureBtn.style.display   = 'flex';
+    dom.stopCamBtn.style.display   = 'flex';
+    dom.rotateCamBtn.style.display = 'flex';
+  } catch(err) {
+    showToast('warning', '📷', 'Camera access denied or unavailable.');
+  }
+}
+
+async function rotateCamera() {
+  _facingMode = _facingMode === 'environment' ? 'user' : 'environment';
+  stopCamera();
+  await startCamera();
+}
+
+function stopCamera() {
+  if (_stream) {
+    _stream.getTracks().forEach(t => t.stop());
+    _stream = null;
+  }
+  dom.video.srcObject = null;
+  dom.video.style.display    = 'none';
+  dom.camPlaceholder.style.display = 'flex';
+  dom.startCamBtn.style.display  = 'flex';
+  dom.captureBtn.style.display   = 'none';
+  dom.stopCamBtn.style.display   = 'none';
+  dom.rotateCamBtn.style.display = 'none';
+}
+
+async function capturePhoto() {
+  const canvas  = document.createElement('canvas');
+  canvas.width  = dom.video.videoWidth;
+  canvas.height = dom.video.videoHeight;
+  canvas.getContext('2d').drawImage(dom.video, 0, 0);
+  const raw = canvas.toDataURL('image/jpeg', 0.92);
+  const compressed = await compressImage(raw);
+  stopCamera();
+  setPhotoPreview(compressed, true);
+}
+
+/* ── File upload ────────────────────────── */
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (file) processImageFile(file);
+  dom.fileUpload.value = ''; // reset so same file can be re-selected
+}
+
+async function processImageFile(file) {
+  const check = Security.validImage(file);
+  if (!check.ok) { showToast('warning', '⚠️', check.msg); return; }
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const compressed = await compressImage(ev.target.result);
+    setPhotoPreview(compressed, true);
+  };
+  reader.readAsDataURL(file);
+}
+
+function setPhotoPreview(src, isNew) {
+  dom.previewImage.src          = src;
+  dom.previewImage.style.display = 'block';
+  dom.noPhPlaceholder.style.display = 'none';
+  if (isNew) _photoDataUrl = src;
+}
+
+function clearPhoto() {
+  dom.previewImage.src          = '';
+  dom.previewImage.style.display = 'none';
+  dom.noPhPlaceholder.style.display = 'flex';
+  _photoDataUrl = '';
+}
+
+
+async function handleDriveDownload(docId) {
+  const s = _allStudents.find(x => x._docId === docId);
+  if (!s) { showToast('error', '❌', 'Student not found.'); return; }
+
+  // Build filename: SchoolName_StudentName_StudentID
+  const schoolPart = (s.schoolName || 'School').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+  const namePart   = (s.name || 'Student').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+  const idPart     = (s.studentId || docId).replace(/[^a-zA-Z0-9]/g, '');
+  const fileName   = `${schoolPart}_${namePart}_${idPart}.jpg`;
+
+  // If Drive is connected, upload to Drive
+  if (DriveService.isConnected()) {
+    showToast('info', '☁️', `Saving to Drive as ${fileName}…`);
+    try {
+      await DriveService.uploadStudentPhoto({ ...s, driveFileName: fileName });
+      showToast('success', '✅', `Saved to Drive: ${fileName}`);
+    } catch (err) {
+      showToast('error', '❌', 'Drive upload failed: ' + err.message);
+    }
+    return;
+  }
+
+  // No Drive — fall back to local download of photo
+  if (!s.photoUrl) {
+    showToast('warning', '⚠️', 'No photo to download for this student.');
+    return;
+  }
+
+  try {
+    const res  = await fetch(s.photoUrl);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('success', '✅', `Downloaded: ${fileName}`);
+  } catch (err) {
+    showToast('error', '❌', 'Download failed: ' + err.message);
+  }
+}
+/* ════════════════════════════════════════
+   IMPORT
+════════════════════════════════════════ */
+async function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  openModal('importModal');
+  $('importStatus').textContent = 'Reading Excel file…';
+  $('importProgress').style.width = '20%';
+  await tick(50);
+
+  try {
+    const records = await ExportService.importFromExcel(file);
+    $('importStatus').textContent = `Parsed ${records.length} records. Uploading…`;
+    $('importProgress').style.width = '55%';
+    await tick(50);
+
+    const result = await StudentService.importStudents(records);
+    $('importProgress').style.width = '100%';
+    await tick(300);
+    closeModal('importModal');
+
+    if (result.ok) {
+      showToast('success', '✅', `Imported ${result.imported} student(s) successfully.`);
+    } else {
+      showToast('error', '❌', result.msg);
+    }
+  } catch (err) {
+    closeModal('importModal');
+    showToast('error', '❌', 'Import failed: ' + err.message);
+  }
+  dom.fileUpload.value = '';
+}
+
+/* ════════════════════════════════════════
+   DRIVE UI
+════════════════════════════════════════ */
+function updateDriveUI(connected) {
+  const btn = $('driveBtn');
+  if (connected) {
+    btn.classList.add('active');
+    btn.innerHTML = `
+      <div class="drive-dot" aria-hidden="true"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M22 17H12l-5-9h10l5 9z"/><path d="M2 17l5-9"/><path d="M12 17l-5-9"/>
+      </svg>
+      Drive Connected`;
+    $('statDrive').textContent = '✓';
+    $('statDrivePill').textContent = 'Connected';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M22 17H12l-5-9h10l5 9z"/><path d="M2 17l5-9"/><path d="M12 17l-5-9"/>
+      </svg>
+      Connect Drive`;
+    $('statDrive').textContent = '—';
+    $('statDrivePill').textContent = 'Not linked';
+  }
+}
+
+/* ════════════════════════════════════════
+   IMPORT FILE INPUT (toolbar)
+   (separate from photo upload)
+════════════════════════════════════════ */
+// Inject import file input into toolbar (since we don't have it in the main form)
+(function injectImportInput() {
+  const existing = $('importFile');
+  if (existing) {
+    existing.addEventListener('change', handleImport);
+    $('importBtn').addEventListener('click', () => existing.click());
+  }
+})();
+
+</script>
+  </body>
+</html>

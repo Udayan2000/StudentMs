@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – StudentMS</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+   <link rel="stylesheet" href="assets/css/components.css" />
+  <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
+  <!-- JSZip for bulk image download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+</head>
+<body>
+<div class="dash-wrap">
+
+  <!-- ══ TOP NAV ══ -->
+  <nav class="topnav" role="navigation" aria-label="Main navigation">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">🎓</div>
+      <div class="brand-text">
+        <div class="brand-name">StudentMS</div>
+        <div class="brand-sub">Management System</div>
+      </div>
+    </div>
+
+    <div class="nav-center" role="search">
+      <div class="nav-search-wrap">
+        <span class="nav-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </span>
+        <input type="search" id="navSearch" class="nav-search-input" placeholder="Quick search students…" autocomplete="off" aria-label="Search students"/>
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <div class="nav-chip" id="versionChip" aria-live="polite">v<strong id="appVersion">3.0.0</strong></div>
+      <button class="drive-btn" id="driveBtn" title="Connect Google Drive" aria-label="Connect Google Drive">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 17H12l-5-9h10l5 9z"/><path d="M2 17l5-9"/><path d="M12 17l-5-9"/>
+        </svg>
+        <span id="driveBtnLabel">Connect Drive</span>
+      </button>
+      <button class="nav-icon-btn" id="themeToggleBtn" title="Toggle theme" aria-label="Toggle dark/light theme">
+        <span id="themeIcon">🌙</span>
+      </button>
+      <button class="user-btn" id="signOutBtn" title="Sign out" aria-label="Sign out">
+        <div class="user-avatar" id="userAvatar" aria-hidden="true">A</div>
+        <span class="user-name" id="userName">Admin</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ══ MAIN DASHBOARD ══ -->
+  <main id="pageMain" class="dash-page" role="main">
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Student <em>Records</em></h1>
+        <p class="page-sub" id="lastUpdated">Loading database…</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-secondary btn-nav" id="downloadAllImagesBtn" aria-label="Download all student images">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download All Images
+        </button>
+        <button class="btn btn-gradient btn-nav" id="addStudentBtn" aria-label="Add new student">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Student
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="stats-row" role="region" aria-label="Statistics">
+      <div class="stat-card sc-total">
+        <div class="stat-icon" aria-hidden="true">👥</div>
+        <div>
+          <div class="stat-num" id="statTotal" aria-live="polite">0</div>
+          <div class="stat-label">Total Students</div>
+        </div>
+        <div class="stat-pill" id="statTotalPill">All time</div>
+      </div>
+      <div class="stat-card sc-active">
+        <div class="stat-icon" aria-hidden="true">✅</div>
+        <div>
+          <div class="stat-num" id="statActive" aria-live="polite">0</div>
+          <div class="stat-label">Active Students</div>
+        </div>
+        <div class="stat-pill" id="statActivePill">Enrolled</div>
+      </div>
+      <div class="stat-card sc-deleted">
+        <div class="stat-icon" aria-hidden="true">🗑️</div>
+        <div>
+          <div class="stat-num" id="statDeleted" aria-live="polite">0</div>
+          <div class="stat-label">Deleted Students</div>
+        </div>
+        <div class="stat-pill">Archived</div>
+      </div>
+      <div class="stat-card sc-drive">
+        <div class="stat-icon" aria-hidden="true">☁️</div>
+        <div>
+          <div class="stat-num" id="statDrive" aria-live="polite">—</div>
+          <div class="stat-label">Drive Status</div>
+        </div>
+        <div class="stat-pill" id="statDrivePill">Not linked</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar-card" role="search" aria-label="Search and filter">
+      <div class="toolbar-row1">
+        <div class="search-wrap">
+          <span class="search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </span>
+          <input type="search" id="searchInput" class="search-input" placeholder="Search name, ID, contact, Aadhaar, roll…" autocomplete="off" aria-label="Search students"/>
+          <button class="search-clear" id="searchClearBtn" title="Clear search" aria-label="Clear search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <select id="filterClass" class="filter-select" aria-label="Filter by class">
+          <option value="">All Classes</option>
+        </select>
+
+        <select id="filterSection" class="filter-select" aria-label="Filter by section">
+          <option value="">All Sections</option>
+        </select>
+
+        <select id="filterStatus" class="filter-select" aria-label="Filter by status" style="min-width:110px;">
+          <option value="">All Status</option>
+          <option value="active">Active Only</option>
+          <option value="deleted">Deleted Only</option>
+        </select>
+
+        <div class="toolbar-sep" aria-hidden="true"></div>
+
+        <div class="toolbar-btns">
+          <button class="btn btn-export btn-sm" id="exportBtn" title="Export to Excel" aria-label="Export to Excel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Export Excel
+          </button>
+          <button class="btn btn-danger btn-sm" id="clearAllBtn" title="Delete all students" aria-label="Delete all students">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Clear All
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar-row2">
+        <label style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;" for="sortField">Sort:</label>
+        <select id="sortField" class="filter-select" style="min-width:130px;" aria-label="Sort by">
+          <option value="createdAt">Date Added</option>
+          <option value="name">Name</option>
+          <option value="className">Class</option>
+          <option value="rollNo">Roll No.</option>
+          <option value="studentId">Student ID</option>
+          <option value="session">Session</option>
+        </select>
+        <select id="sortDir" class="filter-select" style="min-width:90px;" aria-label="Sort direction">
+          <option value="desc">Newest ↓</option>
+          <option value="asc">Oldest ↑</option>
+        </select>
+
+        <div class="toolbar-sep" aria-hidden="true"></div>
+
+        <button class="btn btn-ghost btn-sm" id="importBtn" aria-label="Import from Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import
+        </button>
+        <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none;" aria-label="Import Excel file"/>
+
+        <button class="btn btn-ghost btn-sm" id="refreshBtn" aria-label="Refresh data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23,4 23,10 17,10"/><polyline points="1,20 1,14 7,14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+
+        <span style="margin-left:auto;font-size:12px;color:var(--muted);" id="resultCount" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <!-- Bulk action bar -->
+    <div class="bulk-bar" id="bulkBar" role="toolbar" aria-label="Bulk actions">
+      <span class="bulk-count" id="bulkCount" aria-live="polite">0 selected</span>
+      <button class="btn btn-export btn-sm" id="bulkExportBtn" aria-label="Export selected students">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16"/><polyline points="14,2 14,8 20,8"/></svg>
+        Export Selected
+      </button>
+      <button class="btn btn-secondary btn-sm" id="bulkDownloadImagesBtn" aria-label="Download selected images">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/></svg>
+        Download Images
+      </button>
+      <button class="btn btn-danger btn-sm" id="bulkDeleteBtn" aria-label="Delete selected students">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14H5V6m3 0V4h8v2"/></svg>
+        Delete Selected
+      </button>
+      <button class="btn btn-ghost btn-sm" id="bulkClearBtn" aria-label="Deselect all">✕ Deselect All</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-outer" role="region" aria-label="Students table">
+      <div class="table-scroll" tabindex="0">
+        <table id="studentTable" aria-label="Student records">
+          <thead>
+            <tr>
+              <th class="td-check">
+                <input type="checkbox" id="selectAll" class="row-check" aria-label="Select all students"/>
+              </th>
+              <th class="td-photo" aria-label="Photo" style="cursor:default;">Photo</th>
+              <th data-sort="name">Name / ID</th>
+              <th data-sort="className">Class</th>
+              <th data-sort="section">SEC</th>
+              <th data-sort="rollNo">Roll</th>
+              <th data-sort="fatherName">Father</th>
+              <th data-sort="motherName">Mother</th>
+              <th data-sort="guardianName">Guardian</th>
+              <th data-sort="contactNo">Contact No.</th>
+              <th data-sort="aadhaarNo">Aadhaar No.</th>
+              <th data-sort="studentId">Student ID</th>
+              <th data-sort="bloodGroup">Blood</th>
+              <th data-sort="session">Session</th>
+              <th data-sort="academicYear">Acad. Year</th>
+              <th data-sort="address" style="cursor:default;">Address</th>
+              <th data-sort="stream">Stream</th>
+              <th data-sort="subjects" style="cursor:default;">Subjects</th>
+              <th data-sort="createdAt">Created</th>
+              <th aria-label="Actions" style="cursor:default;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="studentTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-bar" role="navigation" aria-label="Pagination">
+      <div class="page-info">
+        Showing <strong id="pageFrom">0</strong>–<strong id="pageTo">0</strong>
+        of <strong id="pageTotal">0</strong> records
+      </div>
+      <div class="page-controls" id="pageControls" role="group" aria-label="Page controls"></div>
+      <div class="per-page-wrap">
+        <span class="per-page-label">Per page:</span>
+        <select id="perPage" class="per-page-select" aria-label="Records per page">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+    </div>
+
+  </main><!-- #pageMain -->
+
+  <!-- ══ REGISTRATION / EDIT PAGE ══ -->
+  <main id="pageReg" class="reg-page" style="display:none;" role="main">
+    <div class="reg-header">
+      <button class="btn btn-ghost btn-sm" id="backToListBtn" aria-label="Back to student list" style="margin-bottom:16px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="15,18 9,12 15,6"/></svg>
+        Back to List
+      </button>
+      <h2 class="reg-title" id="regTitle">Add <em>New Student</em></h2>
+      <p class="reg-sub" id="regSub">Fill in all required fields. Photo, Aadhaar, and Contact are validated.</p>
+    </div>
+
+    <div class="edit-banner" id="editBanner" style="display:none;" role="alert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Editing record: <span class="eb-name" id="editBannerName"></span>
+    </div>
+
+    <div class="form-card">
+      <form id="studentForm" novalidate>
+        <input type="hidden" id="editDocId"/>
+        <input type="hidden" id="editPhotoPath"/>
+
+        <div class="form-cols">
+          <!-- LEFT: Photo -->
+          <div>
+            <div class="section-panel">
+              <div class="section-head">
+                <div class="section-icon si-blue" aria-hidden="true">📷</div>
+                <div>
+                  <div class="section-label">Student Photo</div>
+                  <div class="section-sub">Camera or file upload · JPEG/PNG/WebP</div>
+                </div>
+              </div>
+
+              <div class="camera-wrap">
+                <div class="cam-header">
+                  <span class="cam-dot r"></span><span class="cam-dot a"></span><span class="cam-dot g"></span>
+                  Live Camera
+                </div>
+                <div class="cam-ph" id="camPlaceholder" aria-label="Camera not active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  Camera not active
+                </div>
+                <video id="video" autoplay playsinline muted aria-label="Camera preview"></video>
+              </div>
+
+              <div class="cam-btns">
+                <button type="button" class="btn btn-secondary btn-sm" id="startCamBtn" aria-label="Start camera">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 7 16 12l7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                  Start Cam
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="rotateCamBtn" style="display:none;" aria-label="Rotate camera">🔄 Rotate</button>
+                <button type="button" class="btn btn-gradient btn-sm" id="captureBtn" style="display:none;" aria-label="Capture photo">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+                  Capture
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" id="stopCamBtn" style="display:none;" aria-label="Stop camera">✕ Stop</button>
+              </div>
+
+              <div class="upload-zone" id="uploadZone" role="button" tabindex="0" aria-label="Upload photo from file">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+                <p>Drop image here or click to browse</p>
+                <span>JPEG · PNG · WebP · GIF · Max 10 MB</span>
+              </div>
+              <input type="file" id="fileUpload" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment" aria-label="Upload photo"/>
+
+              <div class="preview-wrap" aria-label="Photo preview">
+                <img id="previewImage" alt="Student photo preview"/>
+                <div class="no-ph" id="noPhPlaceholder">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  <p>No photo yet</p>
+                </div>
+              </div>
+
+              <div class="drive-status" id="driveStatus" role="status">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20,6 9,17 4,12"/></svg>
+                Saved to Google Drive
+              </div>
+
+              <button type="button" class="btn btn-ghost btn-sm" id="clearPhotoBtn" style="width:100%;justify-content:center;margin-top:6px;" aria-label="Remove photo">✕ Remove Photo</button>
+            </div>
+          </div><!-- /left -->
+
+          <!-- RIGHT: Form fields -->
+          <div>
+            <!-- Section 1: Identity -->
+            <div class="section-panel">
+              <div class="section-head">
+                <div class="section-icon si-blue" aria-hidden="true">🪪</div>
+                <div>
+                  <div class="section-label">Identity Information</div>
+                  <div class="section-sub">Core identification fields</div>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field" id="fw-name">
+                  <label for="fName">Full Name <span class="req" aria-label="required">*</span></label>
+                  <input type="text" id="fName" placeholder="e.g. Rahul Das" maxlength="150" autocomplete="name"/>
+                  <span class="field-err" role="alert">Name is required.</span>
+                </div>
+                <div class="field" id="fw-studentId">
+                  <label for="fStudentId">Student ID <span class="req" aria-label="required">*</span></label>
+                  <input type="text" id="fStudentId" placeholder="e.g. STU1001" maxlength="60"/>
+                  <span class="field-err" role="alert">Student ID required (unique).</span>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field" id="fw-class">
+                  <label for="fClass">Class <span class="req" aria-label="required">*</span></label>
+                  <input type="text" id="fClass" placeholder="e.g. Class 10 / Grade 12" maxlength="60" list="classList"/>
+                  <datalist id="classList">
+                    <option value="Class 1"/><option value="Class 2"/><option value="Class 3"/>
+                    <option value="Class 4"/><option value="Class 5"/><option value="Class 6"/>
+                    <option value="Class 7"/><option value="Class 8"/><option value="Class 9"/>
+                    <option value="Class 10"/><option value="Class 11"/><option value="Class 12"/>
+                  </datalist>
+                  <span class="field-err" role="alert">Class is required.</span>
+                </div>
+                <div class="field">
+                  <label for="fSection">Section (SEC)</label>
+                  <input type="text" id="fSection" placeholder="e.g. A / B / Science" maxlength="60" list="sectionList"/>
+                  <datalist id="sectionList">
+                    <option value="A"/><option value="B"/><option value="C"/><option value="D"/>
+                  </datalist>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fRollNo">Roll Number</label>
+                  <input type="text" id="fRollNo" placeholder="e.g. 42" maxlength="20"/>
+                </div>
+                <div class="field">
+                  <label for="fGender">Gender</label>
+                  <select id="fGender">
+                    <option value="">— Select —</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fDob">Date of Birth</label>
+                  <input type="date" id="fDob"/>
+                </div>
+                <div class="field">
+                  <label for="fBloodGroup">Blood Group</label>
+                  <select id="fBloodGroup">
+                    <option value="">— Select —</option>
+                    <option>A+</option><option>A-</option>
+                    <option>B+</option><option>B-</option>
+                    <option>AB+</option><option>AB-</option>
+                    <option>O+</option><option>O-</option>
+                  </select>
+                </div>
+              </div>
+            </div><!-- /identity -->
+
+            <!-- Section 2: Family -->
+            <div class="section-panel">
+              <div class="section-head">
+                <div class="section-icon si-green" aria-hidden="true">👨‍👩‍👦</div>
+                <div>
+                  <div class="section-label">Family &amp; Guardian</div>
+                  <div class="section-sub">Parent and guardian details</div>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fFatherName">Father's Name</label>
+                  <input type="text" id="fFatherName" placeholder="Father's full name" maxlength="150"/>
+                </div>
+                <div class="field">
+                  <label for="fMotherName">Mother's Name</label>
+                  <input type="text" id="fMotherName" placeholder="Mother's full name" maxlength="150"/>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fGuardianName">Guardian Name</label>
+                  <input type="text" id="fGuardianName" placeholder="Guardian full name" maxlength="150"/>
+                </div>
+                <div class="field">
+                  <label for="fGuardianRelation">Guardian Relation</label>
+                  <input type="text" id="fGuardianRelation" placeholder="e.g. Uncle, Grandparent" maxlength="60"/>
+                </div>
+              </div>
+            </div><!-- /family -->
+
+            <!-- Section 3: Contact & Aadhaar -->
+            <div class="section-panel">
+              <div class="section-head">
+                <div class="section-icon si-amber" aria-hidden="true">📞</div>
+                <div>
+                  <div class="section-label">Contact &amp; ID Documents</div>
+                  <div class="section-sub">Phone, Aadhaar, address</div>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field" id="fw-contact">
+                  <label for="fContactNo">Contact Number <span class="req" aria-label="required">*</span></label>
+                  <input type="tel" id="fContactNo" placeholder="e.g. +91 98765 43210" maxlength="20" inputmode="tel"/>
+                  <span class="field-err" role="alert">Enter a valid phone number (7–20 digits).</span>
+                </div>
+                <div class="field" id="fw-aadhaar">
+                  <label for="fAadhaarNo">Aadhaar Number</label>
+                  <input type="text" id="fAadhaarNo" placeholder="XXXX-XXXX-XXXX" maxlength="14" inputmode="numeric"/>
+                  <span class="field-err" role="alert">Aadhaar must be 12 digits (unique).</span>
+                  <span class="field-hint">Stored masked · Format: XXXX-XXXX-1234</span>
+                </div>
+              </div>
+
+              <div class="field" id="fw-address">
+                <label for="fAddress">Full Address</label>
+                <textarea id="fAddress" placeholder="House/Village, District, State, PIN" maxlength="800" rows="3"></textarea>
+              </div>
+            </div><!-- /contact -->
+
+            <!-- Section 4: Academic -->
+            <div class="section-panel">
+              <div class="section-head">
+                <div class="section-icon si-violet" aria-hidden="true">🎓</div>
+                <div>
+                  <div class="section-label">Academic Information</div>
+                  <div class="section-sub">Session, stream, school details</div>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fSession">Session</label>
+                  <input type="text" id="fSession" placeholder="e.g. 2024-25" maxlength="60" list="sessionList"/>
+                  <datalist id="sessionList">
+                    <option value="2023-24"/><option value="2024-25"/><option value="2025-26"/>
+                  </datalist>
+                </div>
+                <div class="field">
+                  <label for="fAcademicYear">Academic Year</label>
+                  <input type="text" id="fAcademicYear" placeholder="e.g. 2024" maxlength="20"/>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="fStream">Stream</label>
+                  <select id="fStream">
+                    <option value="">— Select —</option>
+                    <option value="Science">Science</option>
+                    <option value="Commerce">Commerce</option>
+                    <option value="Arts / Humanities">Arts / Humanities</option>
+                    <option value="Vocational">Vocational</option>
+                    <option value="General">General</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="fSchoolName">School / Institution</label>
+                  <input type="text" id="fSchoolName" placeholder="School name" maxlength="150"/>
+                </div>
+              </div>
+
+              <!-- ✨ NEW: Professional Multi-Select Subject Picker -->
+              <div class="field">
+                <label>Subjects</label>
+                <div class="multiselect-wrap" id="subjectMultiSelect" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-label="Select subjects" tabindex="0">
+                  <div class="multiselect-display" id="subjectDisplay">
+                    <span class="multiselect-placeholder">Select subjects…</span>
+                  </div>
+                  <div class="multiselect-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>
+                  </div>
+                </div>
+                <div class="multiselect-dropdown" id="subjectDropdown" role="listbox" aria-multiselectable="true" aria-label="Subject options">
+                  <div class="multiselect-search-wrap">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input type="text" id="subjectSearch" class="multiselect-search" placeholder="Search subjects…" autocomplete="off" aria-label="Search subjects"/>
+                  </div>
+                  <div class="multiselect-options" id="subjectOptions" role="group"></div>
+                  <div class="multiselect-footer">
+                    <button type="button" class="multiselect-select-all" id="subjectSelectAll">Select All</button>
+                    <button type="button" class="multiselect-clear-all" id="subjectClearAll">Clear All</button>
+                    <span class="multiselect-count" id="subjectCount">0 selected</span>
+                  </div>
+                </div>
+                <input type="hidden" id="fSubjects"/>
+                <span class="field-hint">Select one or more subjects.</span>
+              </div>
+            </div><!-- /academic -->
+
+            <!-- Form actions -->
+            <div class="form-actions">
+              <button type="button" class="btn btn-neutral" id="cancelFormBtn" aria-label="Cancel and go back">Cancel</button>
+              <button type="reset" class="btn btn-ghost" id="resetFormBtn" aria-label="Reset form">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 1 0 .49-5H1"/></svg>
+                Reset
+              </button>
+              <button type="submit" class="btn btn-gradient" id="submitBtn" style="flex:2;" aria-label="Save student record">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20,6 9,17 4,12"/></svg>
+                <span id="submitBtnLabel">Save Student</span>
+              </button>
+            </div>
+
+          </div><!-- /right -->
+        </div><!-- /form-cols -->
+      </form>
+    </div><!-- /form-card -->
+  </main><!-- #pageReg -->
+
+</div><!-- .dash-wrap -->
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast" role="alert" aria-live="assertive">
+  <span class="toast-icon" id="toastIcon" aria-hidden="true"></span>
+  <span id="toastMsg"></span>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- Delete confirmation -->
+<div class="modal-backdrop" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+  <div class="modal-box">
+    <button class="modal-close-btn" data-close="deleteModal" aria-label="Close">✕</button>
+    <div class="modal-icon danger" aria-hidden="true">🗑️</div>
+    <div class="modal-title" id="deleteModalTitle">Delete Student?</div>
+    <div class="modal-desc">This action is <strong>permanent</strong> and cannot be undone.</div>
+    <code class="modal-subject" id="deleteStudentName" aria-live="polite"></code>
+    <div style="display:flex;gap:10px;margin-bottom:12px;">
+      <button class="btn btn-amber btn-sm" style="flex:1;justify-content:center;" id="softDeleteBtn">Archive (Soft Delete)</button>
+      <button class="btn btn-danger-solid btn-sm" style="flex:1;justify-content:center;" id="hardDeleteBtn">Remove Permanently</button>
+    </div>
+    <button class="btn btn-ghost btn-full" data-close="deleteModal">Cancel</button>
+  </div>
+</div>
+
+<!-- Bulk delete -->
+<div class="modal-backdrop" id="bulkDeleteModal" role="dialog" aria-modal="true" aria-labelledby="bulkDeleteModalTitle">
+  <div class="modal-box">
+    <button class="modal-close-btn" data-close="bulkDeleteModal" aria-label="Close">✕</button>
+    <div class="modal-icon danger" aria-hidden="true">🗑️</div>
+    <div class="modal-title" id="bulkDeleteModalTitle">Delete Selected Students?</div>
+    <div class="modal-desc" id="bulkDeleteDesc">This will permanently delete the selected records.</div>
+    <div class="modal-actions">
+      <button class="btn btn-neutral" data-close="bulkDeleteModal">Cancel</button>
+      <button class="btn btn-danger-solid" id="confirmBulkDeleteBtn">Delete All Selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- Clear all -->
+<div class="modal-backdrop" id="clearAllModal" role="dialog" aria-modal="true" aria-labelledby="clearAllModalTitle">
+  <div class="modal-box">
+    <button class="modal-close-btn" data-close="clearAllModal" aria-label="Close">✕</button>
+    <div class="modal-icon danger" aria-hidden="true">⚠️</div>
+    <div class="modal-title" id="clearAllModalTitle">Clear All Students?</div>
+    <div class="modal-desc">This will <strong>permanently erase every student record</strong>. Type <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;">DELETE ALL</code> to confirm.</div>
+    <div class="field" style="margin-bottom:16px;">
+      <input type="text" id="clearAllConfirmInput" placeholder="Type DELETE ALL" maxlength="20" aria-label="Type DELETE ALL to confirm"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-neutral" data-close="clearAllModal">Cancel</button>
+      <button class="btn btn-danger-solid" id="confirmClearAllBtn" disabled>Yes, Delete Everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="modal-backdrop" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+  <div class="modal-box" style="text-align:center;">
+    <div class="modal-icon info" aria-hidden="true">📊</div>
+    <div class="modal-title" id="exportModalTitle">Exporting Records…</div>
+    <p class="modal-desc" id="exportStatus" aria-live="polite">Preparing data…</p>
+    <div style="height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:16px;">
+      <div id="exportProgress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--indigo),var(--violet));border-radius:99px;transition:width 0.4s ease;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal-backdrop" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+  <div class="modal-box" style="text-align:center;">
+    <div class="modal-icon success" aria-hidden="true">📥</div>
+    <div class="modal-title" id="importModalTitle">Importing Records…</div>
+    <p class="modal-desc" id="importStatus" aria-live="polite">Reading file…</p>
+    <div style="height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:16px;">
+      <div id="importProgress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--emerald),var(--teal));border-radius:99px;transition:width 0.4s ease;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Download Images Progress Modal -->
+<div class="modal-backdrop" id="downloadImagesModal" role="dialog" aria-modal="true" aria-labelledby="downloadImagesModalTitle">
+  <div class="modal-box" style="text-align:center;">
+    <div class="modal-icon info" aria-hidden="true">🖼️</div>
+    <div class="modal-title" id="downloadImagesModalTitle">Downloading Images…</div>
+    <p class="modal-desc" id="downloadImagesStatus" aria-live="polite">Preparing images…</p>
+    <div style="height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:8px;margin-bottom:12px;">
+      <div id="downloadImagesProgress" style="height:100%;width:0%;background:linear-gradient(90deg,var(--indigo),var(--violet));border-radius:99px;transition:width 0.3s ease;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+    <button class="btn btn-danger btn-sm" id="cancelDownloadBtn" style="margin:0 auto;">Cancel</button>
+  </div>
+</div>
+
+<!-- Sign-out confirmation -->
+<div class="modal-backdrop" id="signOutModal" role="dialog" aria-modal="true" aria-labelledby="signOutModalTitle">
+  <div class="modal-box">
+    <button class="modal-close-btn" data-close="signOutModal" aria-label="Close">✕</button>
+    <div class="modal-icon warning" aria-hidden="true">👋</div>
+    <div class="modal-title" id="signOutModalTitle">Sign Out?</div>
+    <div class="modal-desc">You'll be taken back to the login page.</div>
+    <div class="modal-actions">
+      <button class="btn btn-neutral" data-close="signOutModal">Cancel</button>
+      <button class="btn btn-danger" id="confirmSignOutBtn">Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW Student modal -->
+<div class="modal-backdrop modal-xl" id="viewModal" role="dialog" aria-modal="true" aria-labelledby="viewStudentName">
+  <div class="modal-box">
+    <button class="modal-close-btn" data-close="viewModal" aria-label="Close">✕</button>
+    <div class="view-modal-header">
+      <div class="view-photo-wrap" aria-label="Student photo">
+        <img id="viewPhoto" alt="Student photo" style="display:none;"/>
+        <div class="view-ph-icon" id="viewPhIcon" aria-hidden="true">🎓</div>
+      </div>
+      <div class="view-name" id="viewStudentName"></div>
+      <div class="view-id-sub" id="viewStudentSub"></div>
+
+      <div class="view-tabs" role="tablist" aria-label="Student profile tabs">
+        <div class="view-tab active" data-tab="identity" role="tab" aria-selected="true" tabindex="0">🪪 Identity</div>
+        <div class="view-tab" data-tab="family" role="tab" aria-selected="false" tabindex="-1">👨‍👩‍👦 Family</div>
+        <div class="view-tab" data-tab="academic" role="tab" aria-selected="false" tabindex="-1">🎓 Academic</div>
+        <div class="view-tab" data-tab="contact" role="tab" aria-selected="false" tabindex="-1">📞 Contact</div>
+      </div>
+    </div>
+
+    <div class="view-body">
+      <div class="view-panel active" id="viewTab-identity" role="tabpanel">
+        <div class="view-grid">
+          <div class="view-item"><div class="view-label">Student ID</div><div class="view-val" id="vStudentId">—</div></div>
+          <div class="view-item"><div class="view-label">Roll No.</div><div class="view-val" id="vRollNo">—</div></div>
+          <div class="view-item"><div class="view-label">Gender</div><div class="view-val" id="vGender">—</div></div>
+          <div class="view-item"><div class="view-label">Date of Birth</div><div class="view-val" id="vDob">—</div></div>
+          <div class="view-item"><div class="view-label">Blood Group</div><div class="view-val" id="vBloodGroup">—</div></div>
+          <div class="view-item"><div class="view-label">Aadhaar No.</div><div class="view-val" id="vAadhaar">—</div></div>
+        </div>
+      </div>
+
+      <div class="view-panel" id="viewTab-family" role="tabpanel">
+        <div class="view-grid">
+          <div class="view-item"><div class="view-label">Father's Name</div><div class="view-val" id="vFather">—</div></div>
+          <div class="view-item"><div class="view-label">Mother's Name</div><div class="view-val" id="vMother">—</div></div>
+          <div class="view-item"><div class="view-label">Guardian Name</div><div class="view-val" id="vGuardian">—</div></div>
+          <div class="view-item"><div class="view-label">Guardian Relation</div><div class="view-val" id="vGuardianRel">—</div></div>
+          <div class="view-item"><div class="view-label">Contact No.</div><div class="view-val" id="vContact">—</div></div>
+          <div class="view-item full"><div class="view-label">Address</div><div class="view-val" id="vAddress">—</div></div>
+        </div>
+      </div>
+
+      <div class="view-panel" id="viewTab-academic" role="tabpanel">
+        <div class="view-grid">
+          <div class="view-item"><div class="view-label">Class</div><div class="view-val" id="vClass">—</div></div>
+          <div class="view-item"><div class="view-label">Section</div><div class="view-val" id="vSection">—</div></div>
+          <div class="view-item"><div class="view-label">Session</div><div class="view-val" id="vSession">—</div></div>
+          <div class="view-item"><div class="view-label">Academic Year</div><div class="view-val" id="vAcadYear">—</div></div>
+          <div class="view-item"><div class="view-label">Stream</div><div class="view-val" id="vStream">—</div></div>
+          <div class="view-item"><div class="view-label">School</div><div class="view-val" id="vSchool">—</div></div>
+          <div class="view-item full"><div class="view-label">Subjects</div><div class="view-val" id="vSubjects">—</div></div>
+        </div>
+      </div>
+
+      <div class="view-panel" id="viewTab-contact" role="tabpanel">
+        <div class="view-grid">
+          <div class="view-item"><div class="view-label">Created</div><div class="view-val" id="vCreatedAt">—</div></div>
+          <div class="view-item"><div class="view-label">Last Updated</div><div class="view-val" id="vUpdatedAt">—</div></div>
+          <div class="view-item"><div class="view-label">Status</div><div class="view-val" id="vStatus">—</div></div>
+          <div class="view-item"><div class="view-label">Drive Sync</div><div class="view-val" id="vDriveSync">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="view-actions">
+      <button class="btn btn-amber btn-sm" id="viewEditBtn" aria-label="Edit this student">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>
+      <button class="btn btn-danger btn-sm" id="viewDeleteBtn" aria-label="Delete this student">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14H5V6m3 0V4h8v2"/></svg>
+        Delete
+      </button>
+      <button class="btn btn-ghost btn-sm" data-close="viewModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FIREBASE SDKs ══ -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+<!-- App scripts -->
+<script src="assets/js/firebase/config.js"></script>
+<script src="assets/js/utils/helpers.js"></script>
+<script src="assets/js/utils/security.js"></script>
+<script src="assets/js/services/auth.service.js"></script>
+<script src="assets/js/services/student.service.js"></script>
+<script src="assets/js/services/drive.service.js"></script>
+<script src="assets/js/services/export.service.js"></script>
+<script src="assets/js/components/multiselect.js"></script>
+<script src="assets/js/components/bulk-download.js"></script>
+<script src="assets/js/components/dashboard.js"></script>
+</body>
+</html>
