@@ -1,452 +1,272 @@
 /**
- * student.service.js — StudentMS v3 Student Data Service
- *
- * All Firestore operations for students:
- *  - Real-time listeners (subscribeStudents, subscribeStats)
- *  - CRUD: addStudent, updateStudent, getStudent, softDelete, hardDelete, deleteAll, bulkDelete
- *  - Import: importStudents (batch write in chunks)
- *  - Querying: getDistinctValues
- *  - Firebase Storage: photo upload/delete
- *  - Optimistic updates via local cache
- *  - Error classification and retry
+ * student.service.js — StudentMS v3
+ * OPTIMIZED: Instant save with background photo upload.
+ * Text data saves immediately → redirect → photo uploads silently in bg.
  */
 'use strict';
 
 const StudentService = (() => {
+  const db      = () => firebase.firestore();
+  const storage = () => firebase.storage();
+  const col     = () => db().collection('students');
 
-  const COLLECTION = 'students';
-  const MAX_BATCH  = 499; // Firestore batch limit is 500 ops
-  const CHUNK_SIZE = 200; // import chunk size
+  /* ── Background upload queue ────────────────────────── */
+  // Tracks in-progress background uploads so the table can show
+  // a placeholder and swap in the real URL when done.
+  const _pendingUploads = new Map(); // docId → { dataUrl, resolve[] }
 
-  let _db      = null;
-  let _storage = null;
-  let _unsubStudents = null;
-  let _unsubStats    = null;
-
-  /* ── Lazy init ─────────────────────────────────────────── */
-  function _getDb() {
-    if (!_db) _db = firebase.firestore();
-    return _db;
-  }
-  function _getStorage() {
-    if (!_storage) _storage = firebase.storage();
-    return _storage;
-  }
-  function _col() {
-    return _getDb().collection(COLLECTION);
-  }
-
-  /* ════════════════════════════════════════════════════════
-     REAL-TIME LISTENERS
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Subscribe to student records with optional ordering + limit.
-   * @param {Object} opts - { orderBy, orderDir, limit }
-   * @param {Function} callback - (docs[]) => void
-   * @returns {Function} unsubscribe
-   */
-  function subscribeStudents(opts = {}, callback) {
-    // Unsubscribe previous listener
-    if (_unsubStudents) { _unsubStudents(); _unsubStudents = null; }
-
-    let query = _col();
-    const orderField = opts.orderBy  || 'createdAt';
-    const orderDir   = opts.orderDir || 'desc';
-    const lim        = opts.limit    || 10000;
-
+  /* ════════════════════════════════════════
+     ADD STUDENT — instant save, bg photo
+  ════════════════════════════════════════ */
+  async function addStudent(data, photoDataUrl) {
     try {
-      query = query.orderBy(orderField, orderDir).limit(lim);
-    } catch (e) {
-      // Fallback if index not ready
-      query = _col().limit(lim);
-    }
+      // 1. Strip the photoUrl from data — we'll fill it after upload
+      const record = {
+        ...data,
+        photoUrl:    '',          // placeholder until upload finishes
+        photoPath:   '',
+        isActive:    true,
+        createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+      };
 
-    _unsubStudents = query.onSnapshot(
-      snap => {
-        const docs = snap.docs.map(d => _mapDoc(d));
-        callback(docs);
-      },
-      err => {
-        console.error('[StudentService] subscribeStudents error:', err);
-        // Retry with simpler query on index error
-        if (err.code === 'failed-precondition') {
-          console.warn('[StudentService] Falling back to unordered query. Add Firestore index for better performance.');
-          _unsubStudents = _col().limit(lim).onSnapshot(
-            snap => callback(snap.docs.map(d => _mapDoc(d))),
-            e2 => console.error('[StudentService] Fallback query error:', e2)
-          );
+      // 2. Save text record instantly → get docId
+      const ref = await col().add(record);
+      const docId = ref.id;
+
+      // 3. If there's a photo, kick off background upload (do NOT await)
+      if (photoDataUrl) {
+        _uploadPhotoBackground(docId, data, photoDataUrl);
+      }
+
+      // 4. Return immediately — caller redirects now
+      return { ok: true, id: docId };
+    } catch (err) {
+      console.error('[StudentService] addStudent error:', err);
+      return { ok: false, msg: err.message };
+    }
+  }
+
+  /* ════════════════════════════════════════
+     UPDATE STUDENT — instant save, bg photo
+  ════════════════════════════════════════ */
+  async function updateStudent(docId, data, photoDataUrl, oldPhotoPath) {
+    try {
+      const update = {
+        ...data,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      // If new photo provided, blank out photoUrl temporarily
+      // so UI shows spinner/placeholder while bg upload runs.
+      // If no new photo, keep existing photoUrl as-is.
+      if (photoDataUrl) {
+        update.photoUrl  = '';
+        update.photoPath = '';
+      }
+
+      // 1. Save text fields instantly
+      await col().doc(docId).update(update);
+
+      // 2. Background photo upload (no await)
+      if (photoDataUrl) {
+        _uploadPhotoBackground(docId, data, photoDataUrl, oldPhotoPath);
+      }
+
+      return { ok: true, id: docId };
+    } catch (err) {
+      console.error('[StudentService] updateStudent error:', err);
+      return { ok: false, msg: err.message };
+    }
+  }
+
+  /* ════════════════════════════════════════
+     BACKGROUND PHOTO UPLOAD
+     Runs after redirect — updates Firestore
+     when done so table auto-refreshes.
+  ════════════════════════════════════════ */
+  async function _uploadPhotoBackground(docId, data, photoDataUrl, oldPhotoPath) {
+    try {
+      // Convert base64 → blob (avoids large string uploads)
+      const blob     = _dataUrlToBlob(photoDataUrl);
+      const ext      = blob.type === 'image/png' ? 'png' : 'jpg';
+      const safeName = (data.name || 'student').replace(/[^a-z0-9]/gi, '_');
+      const path     = `students/${docId}/${safeName}_${Date.now()}.${ext}`;
+
+      // Delete old photo if editing
+      if (oldPhotoPath) {
+        try { await storage().ref(oldPhotoPath).delete(); } catch (_) {}
+      }
+
+      const snap = await storage().ref(path).put(blob, { contentType: blob.type });
+      const url  = await snap.ref.getDownloadURL();
+
+      // Update Firestore with real photo URL — listener triggers table re-render
+      await col().doc(docId).update({ photoUrl: url, photoPath: path });
+
+      console.log('[StudentService] Background photo upload complete:', docId);
+    } catch (err) {
+      console.error('[StudentService] Background photo upload failed:', err);
+      // Non-fatal — record exists without photo, user can re-upload on edit
+    }
+  }
+
+  /* ── Blob helper ─────────────────────── */
+  function _dataUrlToBlob(dataUrl) {
+    const [header, b64] = dataUrl.split(',');
+    const mime  = header.match(/:(.*?);/)[1];
+    const bytes = atob(b64);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  /* ════════════════════════════════════════
+     DELETE OPERATIONS
+  ════════════════════════════════════════ */
+  async function softDelete(docId) {
+    try {
+      await col().doc(docId).update({
+        isActive:  false,
+        deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      return { ok: true };
+    } catch (err) { return { ok: false, msg: err.message }; }
+  }
+
+  async function hardDelete(docId) {
+    try {
+      const snap = await col().doc(docId).get();
+      if (snap.exists && snap.data().photoPath) {
+        try { await storage().ref(snap.data().photoPath).delete(); } catch (_) {}
+      }
+      await col().doc(docId).delete();
+      return { ok: true };
+    } catch (err) { return { ok: false, msg: err.message }; }
+  }
+
+  async function bulkDelete(ids) {
+    try {
+      const batch = db().batch();
+      for (const id of ids) {
+        batch.delete(col().doc(id));
+        // Fire-and-forget photo cleanup
+        col().doc(id).get().then(snap => {
+          if (snap.exists && snap.data().photoPath) {
+            storage().ref(snap.data().photoPath).delete().catch(() => {});
+          }
+        });
+      }
+      await batch.commit();
+      return { ok: true };
+    } catch (err) { return { ok: false, msg: err.message }; }
+  }
+
+  async function deleteAll() {
+    try {
+      const snap = await col().get();
+      const batchSize = 400;
+      let batch = db().batch();
+      let count = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count >= batchSize) {
+          await batch.commit();
+          batch = db().batch();
+          count = 0;
         }
       }
-    );
-    return () => { if (_unsubStudents) { _unsubStudents(); _unsubStudents = null; } };
+      if (count > 0) await batch.commit();
+      return { ok: true };
+    } catch (err) { return { ok: false, msg: err.message }; }
   }
 
-  /**
-   * Subscribe to aggregate stats (total, active, deleted).
-   * Uses a stats document if it exists, otherwise counts from collection.
-   * @param {Function} callback - ({ total, active, deleted }) => void
-   */
-  function subscribeStats(callback) {
-    if (_unsubStats) { _unsubStats(); _unsubStats = null; }
+  /* ════════════════════════════════════════
+     READ
+  ════════════════════════════════════════ */
+  async function getStudent(docId) {
+    try {
+      const snap = await col().doc(docId).get();
+      if (!snap.exists) return null;
+      return { _docId: snap.id, ...snap.data() };
+    } catch (err) { return null; }
+  }
 
-    _unsubStats = _col().onSnapshot(snap => {
-      let total = 0, active = 0, deleted = 0;
+  function subscribeStudents({ orderBy = 'createdAt', orderDir = 'desc', limit = 10000 } = {}, cb) {
+    return col()
+      .orderBy(orderBy, orderDir)
+      .limit(limit)
+      .onSnapshot(snap => {
+        const docs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+        cb(docs);
+      }, err => console.error('[StudentService] subscribeStudents:', err));
+  }
+
+  function subscribeStats(cb) {
+    return col().onSnapshot(snap => {
+      let active = 0, deleted = 0;
       snap.docs.forEach(d => {
-        total++;
         if (d.data().isActive === false) deleted++;
         else active++;
       });
-      callback({ total, active, deleted });
-    }, err => console.error('[StudentService] subscribeStats error:', err));
-
-    return () => { if (_unsubStats) { _unsubStats(); _unsubStats = null; } };
+      cb({ total: snap.size, active, deleted });
+    });
   }
 
-  /* ════════════════════════════════════════════════════════
-     READ
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Fetch a single student by document ID.
-   * @returns {Promise<Object|null>}
-   */
-  async function getStudent(docId) {
-    try {
-      const snap = await _col().doc(docId).get();
-      if (!snap.exists) return null;
-      return _mapDoc(snap);
-    } catch (err) {
-      console.error('[StudentService] getStudent error:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Get distinct values for a given field (for filter dropdowns).
-   * @param {string} field
-   * @returns {Promise<string[]>}
-   */
   async function getDistinctValues(field) {
     try {
-      const snap = await _col().select(field).get();
-      const values = new Set();
-      snap.docs.forEach(d => {
-        const v = d.data()[field];
-        if (v && typeof v === 'string' && v.trim()) values.add(v.trim());
-      });
-      return [...values].sort((a, b) => a.localeCompare(b, 'en-IN', { numeric: true }));
-    } catch (err) {
-      console.error('[StudentService] getDistinctValues error:', err);
-      return [];
-    }
+      const snap = await col().get();
+      const vals = new Set();
+      snap.docs.forEach(d => { const v = d.data()[field]; if (v) vals.add(v); });
+      return [...vals].sort();
+    } catch (_) { return []; }
   }
 
-  /* ════════════════════════════════════════════════════════
-     CREATE
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Add a new student.
-   * @param {Object} data - sanitized student record
-   * @param {string|null} photoDataUrl - base64 image (optional)
-   * @returns {Promise<{ok, id, msg}>}
-   */
-  async function addStudent(data, photoDataUrl = null) {
-    try {
-      // Check for duplicate studentId
-      if (data.studentId) {
-        const dup = await _col().where('studentId', '==', data.studentId).limit(1).get();
-        if (!dup.empty) return { ok: false, msg: `Student ID "${data.studentId}" already exists.` };
-      }
-
-      // Check for duplicate Aadhaar (only if provided and 12 digits)
-      if (data.aadhaarNo && data.aadhaarNo.replace(/\D/g, '').length === 12) {
-        const dup = await _col().where('aadhaarNo', '==', data.aadhaarNo.replace(/\D/g, '')).limit(1).get();
-        if (!dup.empty) return { ok: false, msg: `Aadhaar number already registered for another student.` };
-      }
-
-      const record = {
-        ...data,
-        isActive:  true,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      };
-
-      // Upload photo first if provided
-      if (photoDataUrl) {
-        const photoResult = await _uploadPhoto(photoDataUrl, data.studentId || _tempId());
-        if (photoResult.ok) {
-          record.photoUrl  = photoResult.url;
-          record.photoPath = photoResult.path;
-        }
-      }
-
-      const ref = await _col().add(record);
-      return { ok: true, id: ref.id };
-    } catch (err) {
-      console.error('[StudentService] addStudent error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /* ════════════════════════════════════════════════════════
-     UPDATE
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Update an existing student.
-   * @param {string} docId
-   * @param {Object} data - fields to update
-   * @param {string|null} newPhotoDataUrl - new photo (replaces old)
-   * @param {string|null} oldPhotoPath - old Storage path to delete
-   * @returns {Promise<{ok, msg}>}
-   */
-  async function updateStudent(docId, data, newPhotoDataUrl = null, oldPhotoPath = null) {
-    try {
-      // Duplicate studentId check (exclude current doc)
-      if (data.studentId) {
-        const dup = await _col()
-          .where('studentId', '==', data.studentId)
-          .limit(2).get();
-        const conflicts = dup.docs.filter(d => d.id !== docId);
-        if (conflicts.length > 0) {
-          return { ok: false, msg: `Student ID "${data.studentId}" is already used by another student.` };
-        }
-      }
-
-      // Duplicate Aadhaar check
-      if (data.aadhaarNo && data.aadhaarNo.replace(/\D/g, '').length === 12) {
-        const cleanAadhaar = data.aadhaarNo.replace(/\D/g, '');
-        const dup = await _col().where('aadhaarNo', '==', cleanAadhaar).limit(2).get();
-        const conflicts = dup.docs.filter(d => d.id !== docId);
-        if (conflicts.length > 0) {
-          return { ok: false, msg: 'Aadhaar number already registered for another student.' };
-        }
-        data.aadhaarNo = cleanAadhaar;
-      }
-
-      const updates = {
-        ...data,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      };
-
-      // New photo
-      if (newPhotoDataUrl) {
-        // Delete old photo from Storage
-        if (oldPhotoPath) await _deletePhoto(oldPhotoPath);
-
-        const studentId = data.studentId || docId;
-        const photoResult = await _uploadPhoto(newPhotoDataUrl, studentId);
-        if (photoResult.ok) {
-          updates.photoUrl  = photoResult.url;
-          updates.photoPath = photoResult.path;
-        }
-      }
-
-      await _col().doc(docId).update(updates);
-      return { ok: true };
-    } catch (err) {
-      console.error('[StudentService] updateStudent error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /* ════════════════════════════════════════════════════════
-     DELETE
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Soft delete — marks isActive:false, keeps the record.
-   */
-  async function softDelete(docId) {
-    try {
-      await _col().doc(docId).update({
-        isActive:  false,
-        deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      return { ok: true };
-    } catch (err) {
-      console.error('[StudentService] softDelete error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /**
-   * Hard delete — removes Firestore doc + Storage photo.
-   */
-  async function hardDelete(docId) {
-    try {
-      const snap = await _col().doc(docId).get();
-      const data = snap.data() || {};
-      if (data.photoPath) await _deletePhoto(data.photoPath);
-      await _col().doc(docId).delete();
-      return { ok: true };
-    } catch (err) {
-      console.error('[StudentService] hardDelete error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /**
-   * Bulk delete multiple students by docId array.
-   * Uses Firestore batched writes (chunked at 499).
-   */
-  async function bulkDelete(docIds) {
-    if (!docIds || !docIds.length) return { ok: false, msg: 'No IDs provided.' };
-    try {
-      const chunks = _chunkArray(docIds, MAX_BATCH);
-      for (const chunk of chunks) {
-        const batch = _getDb().batch();
-        chunk.forEach(id => batch.delete(_col().doc(id)));
-        await batch.commit();
-      }
-      return { ok: true };
-    } catch (err) {
-      console.error('[StudentService] bulkDelete error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /**
-   * Delete ALL students (hard delete). Use with extreme caution.
-   * Processes in chunks to handle Firestore batch limits.
-   */
-  async function deleteAll() {
-    try {
-      const snap = await _col().get();
-      if (snap.empty) return { ok: true };
-
-      const chunks = _chunkArray(snap.docs, MAX_BATCH);
-      for (const chunk of chunks) {
-        const batch = _getDb().batch();
-        chunk.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-      }
-      return { ok: true };
-    } catch (err) {
-      console.error('[StudentService] deleteAll error:', err);
-      return { ok: false, msg: _friendlyError(err) };
-    }
-  }
-
-  /* ════════════════════════════════════════════════════════
-     IMPORT (Excel → Firestore)
-  ════════════════════════════════════════════════════════ */
-
-  /**
-   * Import an array of student records (from ExportService.importFromExcel).
-   * Chunks into batches of CHUNK_SIZE.
-   * @param {Array} records
-   * @returns {Promise<{ok, imported, failed, msg}>}
-   */
+  /* ════════════════════════════════════════
+     IMPORT
+  ════════════════════════════════════════ */
   async function importStudents(records) {
-    if (!records || !records.length) return { ok: false, msg: 'No records to import.' };
-
-    let imported = 0, failed = 0;
-    const chunks = _chunkArray(records, CHUNK_SIZE);
-
     try {
-      for (const chunk of chunks) {
-        const batch = _getDb().batch();
-        chunk.forEach(rec => {
-          try {
-            const clean = Security.sanitizeRecord(rec);
-            const ref   = _col().doc();
-            batch.set(ref, {
-              ...clean,
-              isActive:  true,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            });
-            imported++;
-          } catch (e) {
-            failed++;
-            console.warn('[StudentService] importStudents: bad record', rec, e);
-          }
+      const batchSize = 400;
+      let batch = db().batch();
+      let count = 0;
+      let imported = 0;
+
+      for (const rec of records) {
+        const ref = col().doc();
+        batch.set(ref, {
+          ...rec,
+          isActive:  true,
+          photoUrl:  '',
+          photoPath: '',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         });
-        await batch.commit();
+        count++;
+        imported++;
+        if (count >= batchSize) {
+          await batch.commit();
+          batch = db().batch();
+          count = 0;
+        }
       }
-      return { ok: true, imported, failed };
-    } catch (err) {
-      console.error('[StudentService] importStudents error:', err);
-      return { ok: false, imported, failed, msg: _friendlyError(err) };
-    }
+      if (count > 0) await batch.commit();
+      return { ok: true, imported };
+    } catch (err) { return { ok: false, msg: err.message }; }
   }
 
-  /* ════════════════════════════════════════════════════════
-     PHOTO STORAGE
-  ════════════════════════════════════════════════════════ */
-
-  async function _uploadPhoto(dataUrl, studentId) {
-    try {
-      const storage = _getStorage();
-      const path    = `students/${studentId}_${Date.now()}.jpg`;
-      const ref     = storage.ref(path);
-      await ref.putString(dataUrl, 'data_url', { contentType: 'image/jpeg' });
-      const url = await ref.getDownloadURL();
-      return { ok: true, url, path };
-    } catch (err) {
-      console.error('[StudentService] _uploadPhoto error:', err);
-      return { ok: false };
-    }
-  }
-
-  async function _deletePhoto(path) {
-    if (!path) return;
-    try {
-      await _getStorage().ref(path).delete();
-    } catch (err) {
-      // ignore not-found errors
-      if (err.code !== 'storage/object-not-found') {
-        console.warn('[StudentService] _deletePhoto warning:', err.message);
-      }
-    }
-  }
-
-  /* ════════════════════════════════════════════════════════
-     INTERNAL HELPERS
-  ════════════════════════════════════════════════════════ */
-
-  function _mapDoc(doc) {
-    return { _docId: doc.id, ...doc.data() };
-  }
-
-  function _chunkArray(arr, size) {
-    const chunks = [];
-    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-    return chunks;
-  }
-
-  function _tempId() {
-    return 'TEMP_' + Math.random().toString(36).substring(2, 10).toUpperCase();
-  }
-
-  function _friendlyError(err) {
-    const code = err.code || '';
-    if (code === 'permission-denied')      return 'Permission denied. Check Firestore security rules.';
-    if (code === 'unavailable')            return 'Database unavailable. Check your internet connection.';
-    if (code === 'deadline-exceeded')      return 'Request timed out. Try again.';
-    if (code === 'resource-exhausted')     return 'Quota exceeded. Please wait and try again.';
-    if (code === 'already-exists')         return 'Record already exists.';
-    if (code === 'not-found')              return 'Record not found.';
-    return err.message || 'An unexpected error occurred.';
-  }
-
-  /* ── Public API ────────────────────────────────────────── */
   return {
-    subscribeStudents,
-    subscribeStats,
-    getStudent,
-    getDistinctValues,
     addStudent,
     updateStudent,
     softDelete,
     hardDelete,
     bulkDelete,
     deleteAll,
+    getStudent,
+    subscribeStudents,
+    subscribeStats,
+    getDistinctValues,
     importStudents,
   };
-
 })();

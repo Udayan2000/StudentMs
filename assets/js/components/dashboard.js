@@ -628,19 +628,41 @@ function _parseSubjects(subjects) {
 /* ════════════════════════════════════════
    FORM SUBMIT — Optimistic UI + Fast Save
 ════════════════════════════════════════ */
+/**
+ * dashboard.js PATCH — Replace handleFormSubmit with instant-redirect version.
+ *
+ * HOW TO APPLY:
+ *   Find the existing handleFormSubmit function in your dashboard.js and
+ *   replace it (and the validateForm function below it) with this entire block.
+ *
+ * KEY CHANGES:
+ *   1. Click Save → validates → saves text to Firestore → redirects INSTANTLY
+ *   2. Photo upload happens in background (StudentService handles it)
+ *   3. Table shows row with placeholder photo immediately (blank → real photo
+ *      appears automatically when Firestore listener picks up the bg update)
+ *   4. Optimistic local insert: new student appears in table before
+ *      Firestore even confirms, giving zero perceived wait time.
+ */
+
+
+/* ════════════════════════════════════════
+   FORM SUBMIT — INSTANT REDIRECT
+   Photo uploads happen after redirect.
+════════════════════════════════════════ */
 async function handleFormSubmit(e) {
   e.preventDefault();
   if (!validateForm()) return;
 
   const btn = $('submitBtn');
   const lbl = $('submitBtnLabel');
-  btn.disabled = true;
-  lbl.textContent = _editDocId ? 'Updating…' : 'Saving…';
+  btn.disabled    = true;
+  lbl.textContent = _editDocId ? 'Saving…' : 'Saving…';
 
-  // subjects as array (new format) and comma-string (backwards compat)
+  // Subjects
   const subjectsArr = _subjectPicker ? _subjectPicker.getSelected() : [];
   const subjectsStr = subjectsArr.join(', ');
 
+  // Build record
   const raw = {
     name:             dom.fName.value.trim(),
     studentId:        dom.fStudentId.value.trim(),
@@ -660,49 +682,71 @@ async function handleFormSubmit(e) {
     session:          dom.fSession.value.trim(),
     academicYear:     dom.fAcademicYear.value.trim(),
     stream:           dom.fStream.value,
-    subjects:         subjectsStr,      // comma string for backwards compat
-    subjectsArray:    subjectsArr,       // new array format
+    subjects:         subjectsStr,
+    subjectsArray:    subjectsArr,
     schoolName:       dom.fSchoolName.value.trim(),
-    photoUrl:         dom.previewImage.style.display !== 'none' ? dom.previewImage.src : '',
+    // photoUrl intentionally omitted here — StudentService sets it
   };
 
-  const data = Security.sanitizeRecord(raw);
+  const data   = Security.sanitizeRecord(raw);
+  const photoDataUrl = _photoDataUrl || null;   // may be '' → null
+  const oldPhotoPath = $('editPhotoPath').value || '';
 
   let result;
   if (_editDocId) {
-    result = await StudentService.updateStudent(_editDocId, data, _photoDataUrl || null, $('editPhotoPath').value);
+    result = await StudentService.updateStudent(_editDocId, data, photoDataUrl, oldPhotoPath);
   } else {
-    result = await StudentService.addStudent(data, _photoDataUrl || null);
+    result = await StudentService.addStudent(data, photoDataUrl);
   }
 
-  btn.disabled = false;
-  lbl.textContent = _editDocId ? 'Update Student' : 'Save Student';
-
+  // ── Whether photo upload is pending or not, redirect NOW ──
   if (result.ok) {
-    showToast('success', '✅', _editDocId ? 'Record updated.' : 'Student added.');
-
-    // Drive upload with folder structure
-    if (DriveService.isConnected() && result.id) {
-      const studentId = result.id || _editDocId;
-      const student   = await StudentService.getStudent(studentId);
-      if (student?.photoUrl) {
-        try {
-          await DriveService.uploadStudentPhotoOrganized(student);
-          $('driveStatus').classList.add('show');
-          setTimeout(() => $('driveStatus').classList.remove('show'), 4000);
-        } catch (err) {
-          console.warn('Drive upload failed:', err);
-        }
-      }
+    // Optimistic local insert so table shows the row immediately
+    // before the Firestore listener catches up.
+    if (!_editDocId && result.id) {
+      const optimisticRecord = {
+        _docId:    result.id,
+        ...data,
+        photoUrl:  _photoDataUrl || '',   // show captured photo instantly (dataUrl)
+        isActive:  true,
+        createdAt: { toDate: () => new Date() },  // fake timestamp for sort
+        updatedAt: { toDate: () => new Date() },
+      };
+      _allStudents.unshift(optimisticRecord);
+      renderTable();
     }
 
+    showToast('success', '✅', _editDocId ? 'Record updated.' : 'Student added. Photo uploading…');
+
+    // Redirect immediately — do NOT wait for Drive upload
     showDashboard();
+
+    // Drive upload in background (fire-and-forget)
+    if (DriveService.isConnected() && result.id) {
+      const studentId = result.id || _editDocId;
+      StudentService.getStudent(studentId).then(student => {
+        if (student?.photoUrl) {
+          DriveService.uploadStudentPhotoOrganized(student)
+            .then(() => {
+              $('driveStatus').classList.add('show');
+              setTimeout(() => $('driveStatus').classList.remove('show'), 4000);
+            })
+            .catch(err => console.warn('Drive upload failed:', err));
+        }
+      });
+    }
+
   } else {
-    showToast('error', '❌', result.msg || 'Save failed.');
+    // Only on actual failure do we stay on the form
+    btn.disabled    = false;
+    lbl.textContent = _editDocId ? 'Update Student' : 'Save Student';
+    showToast('error', '❌', result.msg || 'Save failed. Please try again.');
   }
 }
 
-/* ── Validation ─────────────────────────── */
+/* ════════════════════════════════════════
+   VALIDATION (unchanged logic, same place)
+════════════════════════════════════════ */
 function validateForm() {
   let ok = true;
   const fields = [
@@ -718,7 +762,8 @@ function validateForm() {
     if (!test(val)) { fw.classList.add('has-err'); ok = false; }
     else fw.classList.remove('has-err');
   });
-  if (!ok) document.querySelector('.field.has-err')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!ok) document.querySelector('.field.has-err')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   return ok;
 }
 
