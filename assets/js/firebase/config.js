@@ -39,6 +39,8 @@ window.APP_VERSION = '3.0.0';
     firebase.initializeApp(firebaseConfig);
   }
 
+   window.storage = firebase.storage();
+
   // Enable Firestore offline persistence (improves reliability)
   firebase.firestore().enablePersistence({ synchronizeTabs: true })
     .then(() => console.log('[Firebase] Offline persistence enabled.'))
