@@ -24,7 +24,9 @@ const firebaseConfig = {
 // ── Google Drive OAuth2 Client ID ────────────────────────
 // From: console.cloud.google.com → APIs & Services → Credentials
 window.DRIVE_CONFIG = {
-  clientId: '1015966902078-7uv39f05vc7dq6qibqgbcbqbs0gnc8r6.apps.googleusercontent.com',
+  // clientId: '1015966902078-7uv39f05vc7dq6qibqgbcbqbs0gnc8r6.apps.googleusercontent.com',
+  clientId: '1015966902078-kgimp58l7uum4nsgn662ga1pft2722fb.apps.googleusercontent.com',
+  
 };
 
 // Legacy alias (kept for compatibility)

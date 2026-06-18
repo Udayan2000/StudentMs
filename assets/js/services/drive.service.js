@@ -22,36 +22,36 @@
 const DriveService = (() => {
 
   /* ─── Constants ────────────────────────────────────────── */
-  const SCOPE         = 'https://www.googleapis.com/auth/drive.file';
-  const FILES_API     = 'https://www.googleapis.com/drive/v3/files';
-  const UPLOAD_API    = 'https://www.googleapis.com/upload/drive/v3/files';
-  const FOLDER_MIME   = 'application/vnd.google-apps.folder';
-  const TOKEN_KEY     = 'sms_drive_token';
+  const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  const FILES_API = 'https://www.googleapis.com/drive/v3/files';
+  const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files';
+  const FOLDER_MIME = 'application/vnd.google-apps.folder';
+  const TOKEN_KEY = 'sms_drive_token';
   const TOKEN_EXP_KEY = 'sms_drive_token_exp';
 
   /* ─── Config (override via window.DRIVE_CONFIG) ────────── */
   const CFG = Object.assign({
-    clientId:          '',          // set in config.js: window.DRIVE_CONFIG = { clientId: '...' }
-    maxRetries:        3,
-    retryDelayMs:      1200,
-    concurrency:       4,           // parallel uploads
-    chunkSizeMB:       5,           // resumable upload chunk size
+    clientId: '',          // set in config.js: window.DRIVE_CONFIG = { clientId: '...' }
+    maxRetries: 3,
+    retryDelayMs: 1200,
+    concurrency: 4,           // parallel uploads
+    chunkSizeMB: 5,           // resumable upload chunk size
     skipExistingFiles: true,        // don't re-upload if file already exists in Drive
   }, (typeof window !== 'undefined' && window.DRIVE_CONFIG) || {});
 
   /* ─── State ─────────────────────────────────────────────── */
-  let _token       = null;
-  let _tokenExp    = 0;            // epoch ms
-  let _connected   = false;
-  let _cancelFlag  = false;
-  const _folderCache  = {};        // "parentId:name" → folderId
-  const _fileCache    = {};        // "folderId:fileName" → fileId
-  let _tokenClient    = null;
+  let _token = null;
+  let _tokenExp = 0;            // epoch ms
+  let _connected = false;
+  let _cancelFlag = false;
+  const _folderCache = {};        // "parentId:name" → folderId
+  const _fileCache = {};        // "folderId:fileName" → fileId
+  let _tokenClient = null;
 
   /* ─── Logger ─────────────────────────────────────────────── */
   const log = {
-    info:  (...a) => console.log('[DriveService]',  ...a),
-    warn:  (...a) => console.warn('[DriveService]', ...a),
+    info: (...a) => console.log('[DriveService]', ...a),
+    warn: (...a) => console.warn('[DriveService]', ...a),
     error: (...a) => console.error('[DriveService]', ...a),
   };
 
@@ -82,16 +82,28 @@ const DriveService = (() => {
       try {
         _tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: clientId,
-          scope:     SCOPE,
-          callback:  (resp) => {
+          scope: SCOPE,
+          callback: (resp) => {
+            // if (resp.error) {
+            //   log.error('OAuth error:', resp.error);
+            //   _connected = false;
+            //   resolve(false);
+            //   return;
+            // }
             if (resp.error) {
-              log.error('OAuth error:', resp.error);
-              _connected = false;
+              console.error(resp);
+
+              if (resp.error === "deleted_client") {
+                alert("This Google OAuth Client has been deleted. Create a new OAuth Client ID in Google Cloud Console.");
+              } else {
+                alert("Google Sign-In failed: " + resp.error);
+              }
+
               resolve(false);
               return;
             }
-            _token     = resp.access_token;
-            _tokenExp  = Date.now() + ((resp.expires_in || 3600) * 1000) - 60000; // 1 min buffer
+            _token = resp.access_token;
+            _tokenExp = Date.now() + ((resp.expires_in || 3600) * 1000) - 60000; // 1 min buffer
             _connected = true;
             _persistToken();
             log.info('Connected. Token valid for', Math.round((resp.expires_in || 3600) / 60), 'min.');
@@ -117,10 +129,10 @@ const DriveService = (() => {
   function disconnect() {
     if (_token && typeof google !== 'undefined') {
       try { google.accounts.oauth2.revoke(_token, () => log.info('Token revoked.')); }
-      catch (_) {}
+      catch (_) { }
     }
-    _token     = null;
-    _tokenExp  = 0;
+    _token = null;
+    _tokenExp = 0;
     _connected = false;
     _clearPersistedToken();
     Object.keys(_folderCache).forEach(k => delete _folderCache[k]);
@@ -138,17 +150,17 @@ const DriveService = (() => {
   async function uploadStudentPhotoOrganized(student, onProgress) {
     _guardConnected();
 
-    const school  = _sanitize(student.schoolName || 'Unknown_School');
-    const cls     = _sanitize(student.className  || 'Unknown_Class');
-    const section = _sanitize(student.section    || 'Unknown_Section');
+    const school = _sanitize(student.schoolName || 'Unknown_School');
+    const cls = _sanitize(student.className || 'Unknown_Class');
+    const section = _sanitize(student.section || 'Unknown_Section');
 
     _progress(onProgress, 5, 'Creating Drive folders…');
 
     // Build folder tree
-    const schoolId  = await _ensureFolder(school,          'root');
-    const imagesId  = await _ensureFolder('StudentImages',  schoolId);
-    const classId   = await _ensureFolder(cls,              imagesId);
-    const sectionId = await _ensureFolder(section,          classId);
+    const schoolId = await _ensureFolder(school, 'root');
+    const imagesId = await _ensureFolder('StudentImages', schoolId);
+    const classId = await _ensureFolder(cls, imagesId);
+    const sectionId = await _ensureFolder(section, classId);
 
     _progress(onProgress, 25, 'Fetching photo…');
 
@@ -204,7 +216,7 @@ const DriveService = (() => {
     _cancelFlag = false;
 
     const withPhotos = students.filter(s => s.photoUrl || s._photoBlob);
-    const total      = withPhotos.length;
+    const total = withPhotos.length;
     if (!total) return { uploaded: 0, skipped: 0, failed: 0, results: [] };
 
     let done = 0, uploaded = 0, failed = 0, skipped = 0;
@@ -251,14 +263,14 @@ const DriveService = (() => {
    */
   async function listStudentPhotos(schoolName, className, section) {
     _guardConnected();
-    const school  = _sanitize(schoolName || '');
-    const cls     = _sanitize(className  || '');
-    const sec     = _sanitize(section    || '');
+    const school = _sanitize(schoolName || '');
+    const cls = _sanitize(className || '');
+    const sec = _sanitize(section || '');
 
-    const schoolId  = await _findFolder(school,         'root');  if (!schoolId)  return [];
-    const imagesId  = await _findFolder('StudentImages', schoolId); if (!imagesId) return [];
-    const classId   = await _findFolder(cls,             imagesId); if (!classId)  return [];
-    const sectionId = await _findFolder(sec,             classId);  if (!sectionId) return [];
+    const schoolId = await _findFolder(school, 'root'); if (!schoolId) return [];
+    const imagesId = await _findFolder('StudentImages', schoolId); if (!imagesId) return [];
+    const classId = await _findFolder(cls, imagesId); if (!classId) return [];
+    const sectionId = await _findFolder(sec, classId); if (!sectionId) return [];
 
     return _listFiles(sectionId);
   }
@@ -277,16 +289,16 @@ const DriveService = (() => {
    */
   function tryRestoreToken() {
     try {
-      const t   = sessionStorage.getItem(TOKEN_KEY);
+      const t = sessionStorage.getItem(TOKEN_KEY);
       const exp = Number(sessionStorage.getItem(TOKEN_EXP_KEY) || 0);
       if (t && Date.now() < exp) {
-        _token     = t;
-        _tokenExp  = exp;
+        _token = t;
+        _tokenExp = exp;
         _connected = true;
         log.info('Token restored from session. Expires in', Math.round((exp - Date.now()) / 60000), 'min.');
         return true;
       }
-    } catch (_) {}
+    } catch (_) { }
     return false;
   }
 
@@ -365,9 +377,9 @@ const DriveService = (() => {
     const res = await _fetchWithRetry(
       `${UPLOAD_API}?uploadType=multipart&fields=id`,
       {
-        method:  'POST',
+        method: 'POST',
         headers: { Authorization: `Bearer ${_token}` },
-        body:    form,
+        body: form,
       }
     );
     const data = await res.json();
@@ -394,7 +406,7 @@ const DriveService = (() => {
     const opts = {
       method,
       headers: {
-        Authorization:  `Bearer ${_token}`,
+        Authorization: `Bearer ${_token}`,
         'Content-Type': 'application/json',
       },
     };
@@ -451,7 +463,7 @@ const DriveService = (() => {
       try {
         return await fn();
       } catch (err) {
-        if (err instanceof DriveError && ['UNAUTHORIZED','NO_PHOTO'].includes(err.code)) throw err;
+        if (err instanceof DriveError && ['UNAUTHORIZED', 'NO_PHOTO'].includes(err.code)) throw err;
         if (attempt === retries) throw err;
         const delay = CFG.retryDelayMs * Math.pow(2, attempt);
         log.warn(`Op retry ${attempt + 1}/${retries} in ${delay}ms:`, err.message);
@@ -465,7 +477,7 @@ const DriveService = (() => {
     try {
       const j = await res.json();
       msg = j.error?.message || msg;
-    } catch (_) {}
+    } catch (_) { }
     throw new DriveError('API_ERROR', msg, res.status);
   }
 
@@ -479,8 +491,8 @@ const DriveService = (() => {
       try {
         _tokenClient.callback = (resp) => {
           if (resp.error) { resolve(false); return; }
-          _token     = resp.access_token;
-          _tokenExp  = Date.now() + ((resp.expires_in || 3600) * 1000) - 60000;
+          _token = resp.access_token;
+          _tokenExp = Date.now() + ((resp.expires_in || 3600) * 1000) - 60000;
           _persistToken();
           log.info('Token refreshed.');
           resolve(true);
@@ -495,16 +507,16 @@ const DriveService = (() => {
 
   function _persistToken() {
     try {
-      sessionStorage.setItem(TOKEN_KEY,     _token);
+      sessionStorage.setItem(TOKEN_KEY, _token);
       sessionStorage.setItem(TOKEN_EXP_KEY, String(_tokenExp));
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function _clearPersistedToken() {
     try {
       sessionStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(TOKEN_EXP_KEY);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   /* ════════════════════════════════════════════════════════
@@ -530,9 +542,9 @@ const DriveService = (() => {
   }
 
   function _buildFileName(s) {
-    const school = _sanitize(s.schoolName  || 'School');
-    const name   = _sanitize(s.name        || 'Student');
-    const roll   = _sanitize(s.rollNo      || s.studentId || '');
+    const school = _sanitize(s.schoolName || 'School');
+    const name = _sanitize(s.name || 'Student');
+    const roll = _sanitize(s.rollNo || s.studentId || '');
     return `${school}_${name}${roll ? '_' + roll : ''}.jpg`;
   }
 
@@ -576,8 +588,8 @@ const DriveService = (() => {
   class DriveError extends Error {
     constructor(code, message, status) {
       super(message);
-      this.name   = 'DriveError';
-      this.code   = code;   // 'NOT_CONNECTED' | 'UNAUTHORIZED' | 'API_ERROR' | 'NO_PHOTO' | 'FETCH_ERROR' | 'MAX_RETRIES'
+      this.name = 'DriveError';
+      this.code = code;   // 'NOT_CONNECTED' | 'UNAUTHORIZED' | 'API_ERROR' | 'NO_PHOTO' | 'FETCH_ERROR' | 'MAX_RETRIES'
       this.status = status || null;
     }
   }

@@ -112,6 +112,10 @@ const dom = {
     $('userName').textContent = displayName.split(' ')[0];
     $('userAvatar').textContent = displayName.charAt(0).toUpperCase();
 
+    // Restore Drive connection (token persisted in sessionStorage) so the
+    // Drive button/stat reflect the real state after a page reload.
+    updateDriveUI(DriveService.tryRestoreToken());
+
     startStatsListener();
     startStudentsListener();
     populateFilterDropdowns();
@@ -383,9 +387,22 @@ function renderRows(students) {
       ? subjectsArr.map(sub => `<span class="badge badge-subject" style="font-size:10px;padding:2px 6px;">${Security.esc(sub)}</span>`).join(' ')
       : '—';
 
-    const photoCell = s.photoUrl
-      ? `<img src="${Security.esc(s.photoUrl)}" class="student-photo" alt="${Security.esc(s.name)}" loading="lazy"/>`
-      : `<div class="photo-ph" aria-hidden="true">🎓</div>`;
+    // const photoCell = s.photoUrl
+    //   ? `<img src="${Security.esc(s.photoUrl)}" class="student-photo" alt="${Security.esc(s.name)}" loading="lazy"/>`
+    //   : `<div class="photo-ph" aria-hidden="true">🎓</div>`;
+
+    const imageUrl =
+    s.photoUrl ||
+    s.photo ||
+    s.image ||
+    "";
+
+const photoCell = imageUrl
+    ? `<img src="${Security.esc(imageUrl)}"
+          class="student-photo"
+          alt="${Security.esc(s.name)}"
+          loading="lazy">`
+    : `<div class="photo-ph">🎓</div>`;
 
     const aadhaarDisplay = s.aadhaarNo ? Security.maskAadhaar(s.aadhaarNo) : '—';
 
@@ -882,21 +899,9 @@ async function handlePhotoDownload(docId) {
   const rollPart   = clean(s.rollNo     || s.studentId || docId);
   const fileName   = `${schoolPart}_${namePart}_${rollPart}.jpg`;
 
-  // If Drive connected — upload
-  if (DriveService.isConnected()) {
-    showToast('info', '☁️', `Saving to Drive…`);
-    try {
-      await DriveService.uploadStudentPhotoOrganized({ ...s, driveFileName: fileName });
-      showToast('success', '✅', `Saved: ${fileName}`);
-    } catch (err) {
-      showToast('error', '❌', 'Drive upload failed: ' + err.message);
-    }
-    return;
-  }
-
-  // No Drive — local download
   if (!s.photoUrl) { showToast('warning', '⚠️', 'No photo for this student.'); return; }
 
+  // Always perform the local download first — this button's job.
   try {
     const res  = await fetch(s.photoUrl);
     const blob = await res.blob();
@@ -911,6 +916,14 @@ async function handlePhotoDownload(docId) {
     showToast('success', '✅', `Downloaded: ${fileName}`);
   } catch (err) {
     showToast('error', '❌', 'Download failed: ' + err.message);
+    return;
+  }
+
+  // If Drive is connected, also sync a copy to Drive in the background.
+  if (DriveService.isConnected()) {
+    DriveService.uploadStudentPhotoOrganized({ ...s, driveFileName: fileName })
+      .then(() => showToast('info', '☁️', 'Also synced to Drive.'))
+      .catch(err => console.warn('Drive sync failed:', err));
   }
 }
 
