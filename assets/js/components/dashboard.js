@@ -1,8 +1,32 @@
 /**
  * dashboard.js — StudentMS v3 Dashboard Controller
- * Manages all UI state, data binding, table rendering, form logic, modals.
- * NEW: Multi-select subjects, bulk image download, optimistic UI updates,
- *      improved filtering, Drive folder structure, large-data optimizations.
+ *
+ * PHOTO FIX v3 — pending photo now lives on the Firestore document itself:
+ *
+ *  1. photoPending field (Firestore-backed, not sessionStorage):
+ *     When a new photo is picked, its base64 dataUrl is written straight
+ *     onto the student document (same call that saves the text fields) as
+ *     `photoPending`. Because it's part of the document, every open tab
+ *     gets it via the real-time listener, a hard refresh sees it again
+ *     (it's not browser-local), and there is no time-based expiry — it is
+ *     only ever cleared when the real https:// photoUrl lands (upload
+ *     finished) or the record itself is deleted.
+ *
+ *  2. _resolvePhoto(doc) — single authoritative resolver:
+ *     Priority: photoPending (upload in flight) → real https URL → legacy
+ *     fields. Used everywhere: renderRows, openViewModal, handlePhotoDownload,
+ *     BulkDownloader calls, edit-form photo load.
+ *
+ *  3. handlePhotoDownload — fixed blob conversion:
+ *     Converts base64 dataUrl to Blob via a proper atob path (no fetch() on
+ *     a dataUrl which can fail in some browsers/CSPs). Remote https URLs use
+ *     fetch(). Both paths produce a local objectUrl for <a download>.
+ *
+ *  4. BulkDownloader shim: wraps the existing BulkDownloader so every student
+ *     object passed to it has _photoResolved injected, ensuring bulk downloads
+ *     work even while real URLs are still uploading.
+ *
+ *  5. Checkbox delegation: single listener on tbody, attached once in bindEvents().
  */
 'use strict';
 
@@ -17,6 +41,26 @@ const SUBJECTS_LIST = [
   'Information Technology','Statistics','Home Science','Agriculture'
 ];
 
+/**
+ * _resolvePhoto — single source of truth for a student's displayable photo URL.
+ *
+ * Priority:
+ *   1. photoPending — base64 dataUrl stashed on the document while a new
+ *      photo is uploading in the background. Lives in Firestore, so it is
+ *      identical in every tab and survives a refresh. It is removed only by
+ *      the server-confirmed upload (photoUrl arrives) or by the record being
+ *      deleted — never by a timer.
+ *   2. Real https:// URL from Firestore/Storage (upload complete).
+ *   3. Legacy field aliases (photo / image) for old records.
+ *   4. Empty string (no photo).
+ */
+function _resolvePhoto(doc) {
+  if (!doc) return '';
+  if (doc.photoPending) return doc.photoPending;
+  if (doc.photoUrl && doc.photoUrl.startsWith('http')) return doc.photoUrl;
+  return doc.photo || doc.image || '';
+}
+
 /* ── State ──────────────────────────────── */
 let _allStudents   = [];
 let _filtered      = [];
@@ -30,11 +74,11 @@ let _filterSection = '';
 let _filterStatus  = '';
 let _selectedIds   = new Set();
 let _editDocId     = null;
-let _photoDataUrl  = '';
+let _photoDataUrl  = '';   // non-empty ONLY when user picks a NEW photo this session
 let _stream        = null;
 let _facingMode    = 'environment';
 let _viewDocId     = null;
-let _subjectPicker = null; // MultiSelectSubjects instance
+let _subjectPicker = null;
 
 /* ── DOM refs ───────────────────────────── */
 const $ = id => document.getElementById(id);
@@ -60,7 +104,6 @@ const dom = {
   importProgress:    $('importProgress'),
   clearAllConfirm:   $('clearAllConfirmInput'),
   confirmClearAll:   $('confirmClearAllBtn'),
-  // form fields
   fName:             $('fName'),
   fStudentId:        $('fStudentId'),
   fClass:            $('fClass'),
@@ -81,7 +124,6 @@ const dom = {
   fStream:           $('fStream'),
   fSchoolName:       $('fSchoolName'),
   fSubjects:         $('fSubjects'),
-  // camera / photo
   video:             $('video'),
   camPlaceholder:    $('camPlaceholder'),
   startCamBtn:       $('startCamBtn'),
@@ -107,15 +149,10 @@ const dom = {
 
   AuthService.onAuthStateChanged((user, role) => {
     if (!user) { window.location.replace('login.html'); return; }
-
     const displayName = user.displayName || user.email || 'Admin';
-    $('userName').textContent = displayName.split(' ')[0];
+    $('userName').textContent  = displayName.split(' ')[0];
     $('userAvatar').textContent = displayName.charAt(0).toUpperCase();
-
-    // Restore Drive connection (token persisted in sessionStorage) so the
-    // Drive button/stat reflect the real state after a page reload.
     updateDriveUI(DriveService.tryRestoreToken());
-
     startStatsListener();
     startStudentsListener();
     populateFilterDropdowns();
@@ -126,7 +163,6 @@ const dom = {
    EVENT BINDING
 ════════════════════════════════════════ */
 function bindEvents() {
-  // Nav / theme / sign-out
   $('themeToggleBtn').addEventListener('click', () => {
     toggleTheme();
     $('themeIcon').textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️';
@@ -137,7 +173,6 @@ function bindEvents() {
     window.location.replace('login.html');
   });
 
-  // Dual search
   const handleSearch = debounce(q => {
     _searchQuery = q.trim();
     _currentPage = 1;
@@ -150,19 +185,17 @@ function bindEvents() {
   dom.navSearch.addEventListener('input',  e => handleSearch(e.target.value));
   dom.searchClearBtn.addEventListener('click', () => handleSearch(''));
 
-  // Filters
-  dom.filterClass.addEventListener('change', e   => { _filterClass   = e.target.value; _currentPage = 1; renderTable(); });
+  dom.filterClass.addEventListener('change',   e => { _filterClass   = e.target.value; _currentPage = 1; renderTable(); });
   dom.filterSection.addEventListener('change', e => { _filterSection = e.target.value; _currentPage = 1; renderTable(); });
-  dom.filterStatus.addEventListener('change', e  => { _filterStatus  = e.target.value; _currentPage = 1; renderTable(); });
+  dom.filterStatus.addEventListener('change',  e => { _filterStatus  = e.target.value; _currentPage = 1; renderTable(); });
   dom.sortField.addEventListener('change', e => { _sortField = e.target.value; _currentPage = 1; renderTable(); });
   dom.sortDir.addEventListener('change',   e => { _sortDir   = e.target.value; _currentPage = 1; renderTable(); });
   dom.perPage.addEventListener('change',   e => { _perPage   = Number(e.target.value); _currentPage = 1; renderTable(); });
 
-  // Table header click-to-sort
   document.querySelectorAll('th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
       const f = th.dataset.sort;
-      if (_sortField === f) { _sortDir = _sortDir === 'asc' ? 'desc' : 'asc'; }
+      if (_sortField === f) _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
       else { _sortField = f; _sortDir = 'asc'; }
       dom.sortField.value = _sortField;
       dom.sortDir.value   = _sortDir;
@@ -171,22 +204,23 @@ function bindEvents() {
     });
   });
 
-  // Select all
   dom.selectAll.addEventListener('change', e => {
     const pageIds = getPageStudents().map(s => s._docId);
-    if (e.target.checked) { pageIds.forEach(id => _selectedIds.add(id)); }
-    else { pageIds.forEach(id => _selectedIds.delete(id)); }
+    if (e.target.checked) pageIds.forEach(id => _selectedIds.add(id));
+    else pageIds.forEach(id => _selectedIds.delete(id));
     updateBulkBar();
     renderTable();
   });
 
-  // Bulk actions
   $('bulkExportBtn').addEventListener('click', () => {
     const sel = _allStudents.filter(s => _selectedIds.has(s._docId));
     ExportService.exportToExcel(sel, DriveService.isConnected());
   });
   $('bulkDownloadImagesBtn').addEventListener('click', () => {
-    const sel = _allStudents.filter(s => _selectedIds.has(s._docId));
+    // Inject _photoResolved so BulkDownloader sees the right URL even mid-upload
+    const sel = _allStudents
+      .filter(s => _selectedIds.has(s._docId))
+      .map(_injectPhotoResolved);
     BulkDownloader.download(sel, 'SelectedStudentImages');
   });
   $('bulkDeleteBtn').addEventListener('click', () => {
@@ -209,10 +243,9 @@ function bindEvents() {
   });
   $('bulkClearBtn').addEventListener('click', () => { _selectedIds.clear(); updateBulkBar(); renderTable(); });
 
-  // Toolbar
   $('addStudentBtn').addEventListener('click', () => showRegPage(null));
   $('downloadAllImagesBtn').addEventListener('click', () => {
-    const students = _filtered.length > 0 ? _filtered : _allStudents;
+    const students = (_filtered.length > 0 ? _filtered : _allStudents).map(_injectPhotoResolved);
     BulkDownloader.download(students, 'AllStudentImages');
   });
   $('exportBtn').addEventListener('click', () => ExportService.exportToExcel(_filtered, DriveService.isConnected()));
@@ -231,16 +264,14 @@ function bindEvents() {
     else showToast('error', '❌', result.msg);
   });
 
-  // Form nav
   $('backToListBtn').addEventListener('click', () => showDashboard());
   $('cancelFormBtn').addEventListener('click', () => showDashboard());
-  $('resetFormBtn').addEventListener('click', () => resetForm());
-  $('studentForm').addEventListener('submit', handleFormSubmit);
+  $('resetFormBtn').addEventListener('click',  () => resetForm());
+  $('studentForm').addEventListener('submit',  handleFormSubmit);
 
-  // Photo / camera
-  $('startCamBtn').addEventListener('click', startCamera);
-  $('stopCamBtn').addEventListener('click', stopCamera);
-  $('captureBtn').addEventListener('click', capturePhoto);
+  $('startCamBtn').addEventListener('click',  startCamera);
+  $('stopCamBtn').addEventListener('click',   stopCamera);
+  $('captureBtn').addEventListener('click',   capturePhoto);
   $('rotateCamBtn').addEventListener('click', rotateCamera);
   $('clearPhotoBtn').addEventListener('click', clearPhoto);
   dom.fileUpload.addEventListener('change', handleFileUpload);
@@ -255,19 +286,30 @@ function bindEvents() {
     if (file) processImageFile(file);
   });
 
-  // Drive
   $('driveBtn').addEventListener('click', async () => {
     if (DriveService.isConnected()) { DriveService.disconnect(); updateDriveUI(false); }
     else { const ok = await DriveService.connect(); updateDriveUI(ok); }
   });
 
-  // View modal tabs
   document.querySelectorAll('.view-tab').forEach(tab => {
     tab.addEventListener('click',   () => switchViewTab(tab.dataset.tab));
     tab.addEventListener('keydown', e => { if (e.key === 'Enter') switchViewTab(tab.dataset.tab); });
   });
   $('viewEditBtn').addEventListener('click',   () => { closeModal('viewModal'); showRegPage(_viewDocId); });
   $('viewDeleteBtn').addEventListener('click', () => { closeModal('viewModal'); openDeleteModal(_viewDocId); });
+
+  // Single delegated checkbox listener — never duplicated across re-renders
+  dom.studentTbody.addEventListener('change', _handleCheckChange);
+}
+
+/* ════════════════════════════════════════
+   HELPER: inject _photoResolved for external consumers (BulkDownloader etc.)
+════════════════════════════════════════ */
+function _injectPhotoResolved(s) {
+  const resolved = _resolvePhoto(s);
+  // BulkDownloader typically reads s.photoUrl — override it with resolved value
+  // so it works regardless of whether upload has finished.
+  return { ...s, photoUrl: resolved || s.photoUrl || '', _photoResolved: resolved };
 }
 
 /* ════════════════════════════════════════
@@ -288,8 +330,12 @@ function startStudentsListener() {
   showSkeleton(dom.studentTbody, 20, 8);
 
   StudentService.subscribeStudents({ orderBy: _sortField, orderDir: _sortDir, limit: 10000 }, (docs) => {
-    _allStudents = docs;
-    _currentPage = 1;
+    _allStudents = docs.map(doc => ({
+      ...doc,
+      // Compute _photoResolved once per snapshot — all rendering reads this field.
+      _photoResolved: _resolvePhoto(doc),
+    }));
+
     renderTable();
     populateFilterDropdowns();
   });
@@ -306,10 +352,8 @@ function renderTable() {
     if (_filterSection && s.section   !== _filterSection) return false;
     if (_filterStatus === 'active'  && s.isActive === false) return false;
     if (_filterStatus === 'deleted' && s.isActive !== false) return false;
-
     if (_searchQuery) {
       const q = _searchQuery.toLowerCase();
-      // Search across many fields including subjects (now can be array or string)
       const subjectsStr = Array.isArray(s.subjects) ? s.subjects.join(' ') : (s.subjects || '');
       return [s.name, s.studentId, s.rollNo, s.fatherName, s.motherName,
               s.contactNo, s.className, s.section, s.stream, subjectsStr,
@@ -319,7 +363,6 @@ function renderTable() {
     return true;
   });
 
-  // Sort
   _filtered.sort((a, b) => {
     let av = a[_sortField] ?? '';
     let bv = b[_sortField] ?? '';
@@ -334,7 +377,7 @@ function renderTable() {
 
   dom.resultCount.textContent = `${_filtered.length} result${_filtered.length !== 1 ? 's' : ''}`;
 
-  const total = _filtered.length;
+  const total      = _filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / _perPage));
   if (_currentPage > totalPages) _currentPage = totalPages;
 
@@ -364,106 +407,97 @@ function renderRows(students) {
           <div class="empty-state">
             <div class="empty-icon" aria-hidden="true">🎓</div>
             <p>No students found</p>
-            <span>${_searchQuery || _filterClass || _filterSection ? 'Try adjusting your search or filters.' : 'Add your first student to get started.'}</span>
+            <span>${_searchQuery || _filterClass || _filterSection
+              ? 'Try adjusting your search or filters.'
+              : 'Add your first student to get started.'}</span>
           </div>
         </td>
       </tr>`;
     return;
   }
 
-  const q = _searchQuery;
-
-  // Build fragment for performance
-  const fragment = document.createDocumentFragment();
-  const tbody    = document.createElement('tbody');
+  const q    = _searchQuery;
+  const rows = [];
 
   students.forEach(s => {
     const isSelected = _selectedIds.has(s._docId);
     const isDeleted  = s.isActive === false;
+    const isPending  = !!s.photoPending; // bg upload still running (from the doc itself)
 
-    // Subjects display — handle both array and comma-string formats
-    const subjectsArr    = _parseSubjects(s.subjects);
+    const subjectsArr     = _parseSubjects(s.subjects);
     const subjectsDisplay = subjectsArr.length
-      ? subjectsArr.map(sub => `<span class="badge badge-subject" style="font-size:10px;padding:2px 6px;">${Security.esc(sub)}</span>`).join(' ')
+      ? subjectsArr.map(sub =>
+          `<span class="badge badge-subject" style="font-size:10px;padding:2px 6px;">${Security.esc(sub)}</span>`
+        ).join(' ')
       : '—';
 
-    // const photoCell = s.photoUrl
-    //   ? `<img src="${Security.esc(s.photoUrl)}" class="student-photo" alt="${Security.esc(s.name)}" loading="lazy"/>`
-    //   : `<div class="photo-ph" aria-hidden="true">🎓</div>`;
+    // _photoResolved set once per snapshot by startStudentsListener
+    const imageUrl  = s._photoResolved || '';
+    const photoCell = imageUrl
+      ? `<img src="${Security.esc(imageUrl)}"
+              class="student-photo"
+              alt="${Security.esc(s.name)}"
+              loading="lazy"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+        + `<div class="photo-ph" style="display:none;" aria-hidden="true">🎓</div>`
+      : `<div class="photo-ph" aria-hidden="true">🎓</div>`;
 
-    const imageUrl =
-    s.photoUrl ||
-    s.photo ||
-    s.image ||
-    "";
-
-const photoCell = imageUrl
-    ? `<img src="${Security.esc(imageUrl)}"
-          class="student-photo"
-          alt="${Security.esc(s.name)}"
-          loading="lazy">`
-    : `<div class="photo-ph">🎓</div>`;
+    // Uploading badge — visible only while base64 preview is showing
+    const uploadingBadge = isPending
+      ? `<span class="badge" style="font-size:9px;padding:1px 5px;background:var(--surface3);color:var(--muted);margin-top:2px;display:block;" title="Photo uploading in background">⏫ uploading…</span>`
+      : '';
 
     const aadhaarDisplay = s.aadhaarNo ? Security.maskAadhaar(s.aadhaarNo) : '—';
 
-    const tr = document.createElement('tr');
-    tr.dataset.id = s._docId;
-    if (isSelected) tr.classList.add('selected');
-
-    tr.innerHTML = `
-      <td class="td-check">
-        <input type="checkbox" class="row-check" aria-label="Select ${Security.esc(s.name)}" ${isSelected ? 'checked' : ''}/>
-      </td>
-      <td class="td-photo">${photoCell}</td>
-      <td class="td-name">
-        <div class="nm">${hlText(s.name, q)}</div>
-        <div class="sid">${hlText(s.studentId, q)}</div>
-        ${isDeleted ? '<span class="badge badge-blood" style="margin-top:2px;">Deleted</span>' : ''}
-      </td>
-      <td>${s.className ? `<span class="badge badge-class">${Security.esc(s.className)}</span>` : '—'}</td>
-      <td>${s.section   ? `<span class="badge badge-section">${Security.esc(s.section)}</span>` : '—'}</td>
-      <td>${Security.esc(s.rollNo) || '—'}</td>
-      <td class="truncate" style="max-width:130px;" title="${Security.esc(s.fatherName)}">${hlText(s.fatherName, q) || '—'}</td>
-      <td class="truncate" style="max-width:130px;" title="${Security.esc(s.motherName)}">${hlText(s.motherName, q) || '—'}</td>
-      <td class="truncate" style="max-width:120px;" title="${Security.esc(s.guardianName)}">${Security.esc(s.guardianName) || '—'}</td>
-      <td>${hlText(s.contactNo, q) || '—'}</td>
-      <td style="font-size:11px;letter-spacing:0.5px;">${aadhaarDisplay}</td>
-      <td style="font-weight:700;">${hlText(s.studentId, q) || '—'}</td>
-      <td>${s.bloodGroup ? `<span class="badge badge-blood">${Security.esc(s.bloodGroup)}</span>` : '—'}</td>
-      <td>${s.session ? `<span class="badge badge-session">${Security.esc(s.session)}</span>` : '—'}</td>
-      <td>${Security.esc(s.academicYear) || '—'}</td>
-      <td class="addr-cell truncate" title="${Security.esc(s.address)}">${Security.esc(s.address) || '—'}</td>
-      <td>${s.stream ? `<span class="badge badge-stream">${Security.esc(s.stream)}</span>` : '—'}</td>
-      <td class="subj-cell">${subjectsDisplay}</td>
-      <td class="no-wrap text-sm text-muted2">${formatDate(s.createdAt)}</td>
-      <td>
-        <div class="action-cell">
-          <button class="act-btn view-btn" data-id="${Security.esc(s._docId)}" title="View profile" aria-label="View ${Security.esc(s.name)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-          <button class="act-btn edit edit-btn" data-id="${Security.esc(s._docId)}" title="Edit record" aria-label="Edit ${Security.esc(s.name)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="act-btn del del-btn" data-id="${Security.esc(s._docId)}" data-name="${Security.esc(s.name)}" title="Delete record" aria-label="Delete ${Security.esc(s.name)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14H5V6m3 0V4h8v2"/></svg>
-          </button>
-          <button class="act-btn drive-dl-btn" data-id="${Security.esc(s._docId)}" title="Download photo" aria-label="Download photo for ${Security.esc(s.name)}" style="color:var(--indigo);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-        </div>
-      </td>`;
-
-    tbody.appendChild(tr);
+    rows.push(`
+      <tr data-id="${Security.esc(s._docId)}"${isSelected ? ' class="selected"' : ''}>
+        <td class="td-check">
+          <input type="checkbox" class="row-check" aria-label="Select ${Security.esc(s.name)}"${isSelected ? ' checked' : ''}/>
+        </td>
+        <td class="td-photo">${photoCell}</td>
+        <td class="td-name">
+          <div class="nm">${hlText(s.name, q)}</div>
+          <div class="sid">${hlText(s.studentId, q)}</div>
+          ${isDeleted ? '<span class="badge badge-blood" style="margin-top:2px;">Deleted</span>' : ''}
+          ${uploadingBadge}
+        </td>
+        <td>${s.className ? `<span class="badge badge-class">${Security.esc(s.className)}</span>` : '—'}</td>
+        <td>${s.section   ? `<span class="badge badge-section">${Security.esc(s.section)}</span>` : '—'}</td>
+        <td>${Security.esc(s.rollNo) || '—'}</td>
+        <td class="truncate" style="max-width:130px;" title="${Security.esc(s.fatherName)}">${hlText(s.fatherName, q) || '—'}</td>
+        <td class="truncate" style="max-width:130px;" title="${Security.esc(s.motherName)}">${hlText(s.motherName, q) || '—'}</td>
+        <td class="truncate" style="max-width:120px;" title="${Security.esc(s.guardianName)}">${Security.esc(s.guardianName) || '—'}</td>
+        <td>${hlText(s.contactNo, q) || '—'}</td>
+        <td style="font-size:11px;letter-spacing:0.5px;">${aadhaarDisplay}</td>
+        <td style="font-weight:700;">${hlText(s.studentId, q) || '—'}</td>
+        <td>${s.bloodGroup ? `<span class="badge badge-blood">${Security.esc(s.bloodGroup)}</span>` : '—'}</td>
+        <td>${s.session ? `<span class="badge badge-session">${Security.esc(s.session)}</span>` : '—'}</td>
+        <td>${Security.esc(s.academicYear) || '—'}</td>
+        <td class="addr-cell truncate" title="${Security.esc(s.address)}">${Security.esc(s.address) || '—'}</td>
+        <td>${s.stream ? `<span class="badge badge-stream">${Security.esc(s.stream)}</span>` : '—'}</td>
+        <td class="subj-cell">${subjectsDisplay}</td>
+        <td class="no-wrap text-sm text-muted2">${formatDate(s.createdAt)}</td>
+        <td>
+          <div class="action-cell">
+            <button class="act-btn view-btn"     data-id="${Security.esc(s._docId)}" title="View profile"   aria-label="View ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button class="act-btn edit edit-btn" data-id="${Security.esc(s._docId)}" title="Edit record"    aria-label="Edit ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="act-btn del del-btn"   data-id="${Security.esc(s._docId)}" title="Delete record"  aria-label="Delete ${Security.esc(s.name)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14H5V6m3 0V4h8v2"/></svg>
+            </button>
+            <button class="act-btn drive-dl-btn"  data-id="${Security.esc(s._docId)}" title="Download photo" aria-label="Download photo for ${Security.esc(s.name)}" style="color:var(--indigo);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`);
   });
 
-  // Replace DOM in one operation
-  dom.studentTbody.innerHTML = '';
-  while (tbody.firstChild) dom.studentTbody.appendChild(tbody.firstChild);
+  dom.studentTbody.innerHTML = rows.join('');
 
-  // Event delegation on tbody
-  dom.studentTbody.addEventListener('change', _handleCheckChange, { once: false });
-
-  // Delegate row action buttons
   dom.studentTbody.querySelectorAll('.view-btn').forEach(btn =>
     btn.addEventListener('click', () => openViewModal(btn.dataset.id)));
   dom.studentTbody.querySelectorAll('.edit-btn').forEach(btn =>
@@ -472,6 +506,7 @@ const photoCell = imageUrl
     btn.addEventListener('click', () => openDeleteModal(btn.dataset.id)));
   dom.studentTbody.querySelectorAll('.drive-dl-btn').forEach(btn =>
     btn.addEventListener('click', () => handlePhotoDownload(btn.dataset.id)));
+  // Checkboxes: handled by delegated listener on tbody (added once in bindEvents)
 }
 
 function _handleCheckChange(e) {
@@ -515,7 +550,7 @@ function updateSortHeaders() {
 }
 
 function updateSelectAllState() {
-  const pageIds = getPageStudents().map(s => s._docId);
+  const pageIds    = getPageStudents().map(s => s._docId);
   const allChecked = pageIds.length > 0 && pageIds.every(id => _selectedIds.has(id));
   dom.selectAll.checked       = allChecked;
   dom.selectAll.indeterminate = !allChecked && pageIds.some(id => _selectedIds.has(id));
@@ -534,7 +569,7 @@ async function populateFilterDropdowns() {
   try {
     const [classes, sections] = await Promise.all([
       StudentService.getDistinctValues('className'),
-      StudentService.getDistinctValues('section')
+      StudentService.getDistinctValues('section'),
     ]);
     _repopulateSelect(dom.filterClass,   'All Classes',  classes);
     _repopulateSelect(dom.filterSection, 'All Sections', sections);
@@ -571,18 +606,17 @@ async function showRegPage(docId) {
   _editDocId = docId;
 
   if (docId) {
-    // Edit mode
-    $('regTitle').innerHTML  = 'Edit <em>Student Record</em>';
-    $('regSub').textContent  = 'Update the fields below and save.';
-    $('editBanner').style.display = 'flex';
-    $('submitBtnLabel').textContent = 'Update Student';
+    $('regTitle').innerHTML          = 'Edit <em>Student Record</em>';
+    $('regSub').textContent          = 'Update the fields below and save.';
+    $('editBanner').style.display    = 'flex';
+    $('submitBtnLabel').textContent  = 'Update Student';
 
     const s = await StudentService.getStudent(docId);
     if (!s) { showToast('error', '❌', 'Record not found.'); showDashboard(); return; }
 
-    $('editBannerName').textContent = s.name;
-    $('editDocId').value     = s._docId;
-    $('editPhotoPath').value = s.photoPath || '';
+    $('editBannerName').textContent  = s.name;
+    $('editDocId').value             = s._docId;
+    $('editPhotoPath').value         = s.photoPath || '';
 
     dom.fName.value             = s.name             || '';
     dom.fStudentId.value        = s.studentId        || '';
@@ -604,19 +638,19 @@ async function showRegPage(docId) {
     dom.fStream.value           = s.stream           || '';
     dom.fSchoolName.value       = s.schoolName       || '';
 
-    // Subjects — multi-select
-    const subjArr = _parseSubjects(s.subjects);
-    _subjectPicker.setSelected(subjArr);
+    _subjectPicker.setSelected(_parseSubjects(s.subjects));
 
-    // Photo
-    if (s.photoUrl) {
-      setPhotoPreview(s.photoUrl, false);
-      _photoDataUrl = '';
-    }
+    // Load photo: pending base64 (still uploading from a previous save)
+    // takes priority over the Firestore URL — it's read straight off the
+    // document, so it's correct no matter which tab/device opened this edit.
+    const existingPhotoUrl = _resolvePhoto(s);
+    if (existingPhotoUrl) setPhotoPreview(existingPhotoUrl, false);
+    // _photoDataUrl stays '' → existing photo kept on save unless user picks new one
+
   } else {
-    $('regTitle').innerHTML = 'Add <em>New Student</em>';
-    $('regSub').textContent = 'Fill in all required fields.';
-    $('editBanner').style.display = 'none';
+    $('regTitle').innerHTML         = 'Add <em>New Student</em>';
+    $('regSub').textContent         = 'Fill in all required fields.';
+    $('editBanner').style.display   = 'none';
     $('submitBtnLabel').textContent = 'Save Student';
   }
 }
@@ -625,17 +659,13 @@ function resetForm() {
   $('studentForm').reset();
   _editDocId    = null;
   _photoDataUrl = '';
-  $('editDocId').value    = '';
+  $('editDocId').value     = '';
   $('editPhotoPath').value = '';
-
   document.querySelectorAll('.field.has-err').forEach(f => f.classList.remove('has-err'));
-
   if (_subjectPicker) _subjectPicker.clear();
-
   clearPhoto();
 }
 
-/* ── Parse subjects (handles both array and comma-string) ── */
 function _parseSubjects(subjects) {
   if (!subjects) return [];
   if (Array.isArray(subjects)) return subjects.filter(Boolean);
@@ -643,28 +673,7 @@ function _parseSubjects(subjects) {
 }
 
 /* ════════════════════════════════════════
-   FORM SUBMIT — Optimistic UI + Fast Save
-════════════════════════════════════════ */
-/**
- * dashboard.js PATCH — Replace handleFormSubmit with instant-redirect version.
- *
- * HOW TO APPLY:
- *   Find the existing handleFormSubmit function in your dashboard.js and
- *   replace it (and the validateForm function below it) with this entire block.
- *
- * KEY CHANGES:
- *   1. Click Save → validates → saves text to Firestore → redirects INSTANTLY
- *   2. Photo upload happens in background (StudentService handles it)
- *   3. Table shows row with placeholder photo immediately (blank → real photo
- *      appears automatically when Firestore listener picks up the bg update)
- *   4. Optimistic local insert: new student appears in table before
- *      Firestore even confirms, giving zero perceived wait time.
- */
-
-
-/* ════════════════════════════════════════
-   FORM SUBMIT — INSTANT REDIRECT
-   Photo uploads happen after redirect.
+   FORM SUBMIT — instant redirect, bg photo upload
 ════════════════════════════════════════ */
 async function handleFormSubmit(e) {
   e.preventDefault();
@@ -673,13 +682,11 @@ async function handleFormSubmit(e) {
   const btn = $('submitBtn');
   const lbl = $('submitBtnLabel');
   btn.disabled    = true;
-  lbl.textContent = _editDocId ? 'Saving…' : 'Saving…';
+  lbl.textContent = 'Saving…';
 
-  // Subjects
   const subjectsArr = _subjectPicker ? _subjectPicker.getSelected() : [];
   const subjectsStr = subjectsArr.join(', ');
 
-  // Build record
   const raw = {
     name:             dom.fName.value.trim(),
     studentId:        dom.fStudentId.value.trim(),
@@ -702,11 +709,10 @@ async function handleFormSubmit(e) {
     subjects:         subjectsStr,
     subjectsArray:    subjectsArr,
     schoolName:       dom.fSchoolName.value.trim(),
-    // photoUrl intentionally omitted here — StudentService sets it
   };
 
-  const data   = Security.sanitizeRecord(raw);
-  const photoDataUrl = _photoDataUrl || null;   // may be '' → null
+  const data         = Security.sanitizeRecord(raw);
+  const photoDataUrl = _photoDataUrl || null;
   const oldPhotoPath = $('editPhotoPath').value || '';
 
   let result;
@@ -716,32 +722,58 @@ async function handleFormSubmit(e) {
     result = await StudentService.addStudent(data, photoDataUrl);
   }
 
-  // ── Whether photo upload is pending or not, redirect NOW ──
   if (result.ok) {
-    // Optimistic local insert so table shows the row immediately
-    // before the Firestore listener catches up.
+    const targetDocId = result.id || _editDocId;
+
+    // NOTE: we no longer need to stash the base64 locally here — addStudent /
+    // updateStudent already wrote it onto the document's `photoPending` field
+    // as part of the very same (awaited) save, before result.ok came back.
+    // The Firestore real-time listener will deliver that to every open tab.
+    // The optimistic patches below just make THIS tab's redraw instant,
+    // without waiting on the listener round-trip.
+
+    // Optimistic in-memory record for instant table display (ADD case)
     if (!_editDocId && result.id) {
-      const optimisticRecord = {
-        _docId:    result.id,
+      const optimistic = {
+        _docId:         result.id,
         ...data,
-        photoUrl:  _photoDataUrl || '',   // show captured photo instantly (dataUrl)
-        isActive:  true,
-        createdAt: { toDate: () => new Date() },  // fake timestamp for sort
-        updatedAt: { toDate: () => new Date() },
+        photoUrl:       '',
+        photoPending:   photoDataUrl || '',
+        _photoResolved: photoDataUrl || '',
+        isActive:       true,
+        createdAt:      { toDate: () => new Date() },
+        updatedAt:      { toDate: () => new Date() },
       };
-      _allStudents.unshift(optimisticRecord);
-      renderTable();
+      if (!_allStudents.find(s => s._docId === result.id)) {
+        _allStudents.unshift(optimistic);
+        renderTable();
+      }
+    } else if (_editDocId && photoDataUrl) {
+      // EDIT with new photo: patch in-memory record for instant display
+      const idx = _allStudents.findIndex(s => s._docId === _editDocId);
+      if (idx !== -1) {
+        _allStudents[idx] = {
+          ..._allStudents[idx],
+          ...data,
+          photoPending:   photoDataUrl,
+          _photoResolved: photoDataUrl,
+        };
+        renderTable();
+      }
     }
 
-    showToast('success', '✅', _editDocId ? 'Record updated.' : 'Student added. Photo uploading…');
+    showToast(
+      'success', '✅',
+      _editDocId
+        ? (photoDataUrl ? 'Record updated. Photo uploading in background…' : 'Record updated.')
+        : (photoDataUrl ? 'Student added. Photo uploading in background…'  : 'Student added.')
+    );
 
-    // Redirect immediately — do NOT wait for Drive upload
     showDashboard();
 
     // Drive upload in background (fire-and-forget)
-    if (DriveService.isConnected() && result.id) {
-      const studentId = result.id || _editDocId;
-      StudentService.getStudent(studentId).then(student => {
+    if (DriveService.isConnected() && targetDocId) {
+      StudentService.getStudent(targetDocId).then(student => {
         if (student?.photoUrl) {
           DriveService.uploadStudentPhotoOrganized(student)
             .then(() => {
@@ -754,7 +786,6 @@ async function handleFormSubmit(e) {
     }
 
   } else {
-    // Only on actual failure do we stay on the form
     btn.disabled    = false;
     lbl.textContent = _editDocId ? 'Update Student' : 'Save Student';
     showToast('error', '❌', result.msg || 'Save failed. Please try again.');
@@ -762,7 +793,7 @@ async function handleFormSubmit(e) {
 }
 
 /* ════════════════════════════════════════
-   VALIDATION (unchanged logic, same place)
+   VALIDATION
 ════════════════════════════════════════ */
 function validateForm() {
   let ok = true;
@@ -779,8 +810,7 @@ function validateForm() {
     if (!test(val)) { fw.classList.add('has-err'); ok = false; }
     else fw.classList.remove('has-err');
   });
-  if (!ok) document.querySelector('.field.has-err')
-    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!ok) document.querySelector('.field.has-err')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   return ok;
 }
 
@@ -822,13 +852,16 @@ async function openViewModal(docId) {
   $('viewStudentName').textContent = s.name || '—';
   $('viewStudentSub').textContent  = [s.studentId, s.className, s.section].filter(Boolean).join(' · ');
 
-  if (s.photoUrl) {
-    $('viewPhoto').src           = s.photoUrl;
-    $('viewPhoto').style.display = 'block';
-    $('viewPhIcon').style.display= 'none';
+  // Use already-computed _photoResolved; fall back to fresh resolve for records
+  // fetched directly from Firestore (not in _allStudents cache)
+  const photoUrl = s._photoResolved || _resolvePhoto(s);
+  if (photoUrl) {
+    $('viewPhoto').src            = photoUrl;
+    $('viewPhoto').style.display  = 'block';
+    $('viewPhIcon').style.display = 'none';
   } else {
-    $('viewPhoto').style.display = 'none';
-    $('viewPhIcon').style.display= 'flex';
+    $('viewPhoto').style.display  = 'none';
+    $('viewPhIcon').style.display = 'flex';
   }
 
   const set = (id, val) => { const el = $(id); if (el) el.textContent = val || '—'; };
@@ -851,7 +884,6 @@ async function openViewModal(docId) {
   set('vStream',     s.stream);
   set('vSchool',     s.schoolName);
 
-  // Subjects as tags
   const subjArr = _parseSubjects(s.subjects || s.subjectsArray);
   const subjEl  = $('vSubjects');
   if (subjEl) {
@@ -887,39 +919,53 @@ function switchViewTab(name) {
 
 /* ════════════════════════════════════════
    INDIVIDUAL PHOTO DOWNLOAD
-   Format: SchoolName_StudentName_RollNo.jpg
+   Works with both base64 dataUrls (pending) and https:// URLs (uploaded).
 ════════════════════════════════════════ */
 async function handlePhotoDownload(docId) {
   const s = _allStudents.find(x => x._docId === docId);
   if (!s) { showToast('error', '❌', 'Student not found.'); return; }
 
-  const clean = str => (str || '').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
-  const schoolPart = clean(s.schoolName || 'School');
-  const namePart   = clean(s.name       || 'Student');
-  const rollPart   = clean(s.rollNo     || s.studentId || docId);
-  const fileName   = `${schoolPart}_${namePart}_${rollPart}.jpg`;
+  const photoUrl = s._photoResolved || _resolvePhoto(s);
+  if (!photoUrl) { showToast('warning', '⚠️', 'No photo available for this student.'); return; }
 
-  if (!s.photoUrl) { showToast('warning', '⚠️', 'No photo for this student.'); return; }
+  const clean    = str => (str || '').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+  const fileName = `${clean(s.schoolName || 'School')}_${clean(s.name || 'Student')}_${clean(s.rollNo || s.studentId || docId)}.jpg`;
 
-  // Always perform the local download first — this button's job.
   try {
-    const res  = await fetch(s.photoUrl);
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
+    let blob;
+
+    if (photoUrl.startsWith('data:')) {
+      // ── Base64 dataUrl path (photo still uploading in background) ──
+      // Convert directly with atob — no fetch() needed, works offline.
+      const [header, b64] = photoUrl.split(',');
+      const mime  = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+      const bytes = atob(b64);
+      const arr   = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      blob = new Blob([arr], { type: mime });
+    } else {
+      // ── Remote https:// URL path ──
+      const res = await fetch(photoUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      blob = await res.blob();
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const a         = document.createElement('a');
+    a.href     = objectUrl;
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
     showToast('success', '✅', `Downloaded: ${fileName}`);
   } catch (err) {
+    console.error('[PhotoDownload] error:', err);
     showToast('error', '❌', 'Download failed: ' + err.message);
     return;
   }
 
-  // If Drive is connected, also sync a copy to Drive in the background.
+  // Drive sync in background if connected
   if (DriveService.isConnected()) {
     DriveService.uploadStudentPhotoOrganized({ ...s, driveFileName: fileName })
       .then(() => showToast('info', '☁️', 'Also synced to Drive.'))
@@ -935,13 +981,13 @@ async function startCamera() {
     _stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: _facingMode, width: { ideal: 1280 }, height: { ideal: 960 } }
     });
-    dom.video.srcObject           = _stream;
-    dom.video.style.display       = 'block';
+    dom.video.srcObject              = _stream;
+    dom.video.style.display          = 'block';
     dom.camPlaceholder.style.display = 'none';
-    dom.startCamBtn.style.display  = 'none';
-    dom.captureBtn.style.display   = 'flex';
-    dom.stopCamBtn.style.display   = 'flex';
-    dom.rotateCamBtn.style.display = 'flex';
+    dom.startCamBtn.style.display    = 'none';
+    dom.captureBtn.style.display     = 'flex';
+    dom.stopCamBtn.style.display     = 'flex';
+    dom.rotateCamBtn.style.display   = 'flex';
   } catch (err) {
     showToast('warning', '📷', 'Camera access denied or unavailable.');
   }
@@ -955,13 +1001,13 @@ async function rotateCamera() {
 
 function stopCamera() {
   if (_stream) { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
-  dom.video.srcObject           = null;
-  dom.video.style.display       = 'none';
+  dom.video.srcObject              = null;
+  dom.video.style.display          = 'none';
   dom.camPlaceholder.style.display = 'flex';
-  dom.startCamBtn.style.display  = 'flex';
-  dom.captureBtn.style.display   = 'none';
-  dom.stopCamBtn.style.display   = 'none';
-  dom.rotateCamBtn.style.display = 'none';
+  dom.startCamBtn.style.display    = 'flex';
+  dom.captureBtn.style.display     = 'none';
+  dom.stopCamBtn.style.display     = 'none';
+  dom.rotateCamBtn.style.display   = 'none';
 }
 
 async function capturePhoto() {
@@ -969,7 +1015,7 @@ async function capturePhoto() {
   canvas.width  = dom.video.videoWidth;
   canvas.height = dom.video.videoHeight;
   canvas.getContext('2d').drawImage(dom.video, 0, 0);
-  const raw = canvas.toDataURL('image/jpeg', 0.92);
+  const raw        = canvas.toDataURL('image/jpeg', 0.92);
   const compressed = await compressImage(raw);
   stopCamera();
   setPhotoPreview(compressed, true);
@@ -993,15 +1039,15 @@ async function processImageFile(file) {
 }
 
 function setPhotoPreview(src, isNew) {
-  dom.previewImage.src           = src;
-  dom.previewImage.style.display = 'block';
+  dom.previewImage.src              = src;
+  dom.previewImage.style.display    = 'block';
   dom.noPhPlaceholder.style.display = 'none';
   if (isNew) _photoDataUrl = src;
 }
 
 function clearPhoto() {
-  dom.previewImage.src           = '';
-  dom.previewImage.style.display = 'none';
+  dom.previewImage.src              = '';
+  dom.previewImage.style.display    = 'none';
   dom.noPhPlaceholder.style.display = 'flex';
   _photoDataUrl = '';
 }
@@ -1051,8 +1097,8 @@ function updateDriveUI(connected) {
         <path d="M22 17H12l-5-9h10l5 9z"/><path d="M2 17l5-9"/><path d="M12 17l-5-9"/>
       </svg>
       Drive Connected`;
-    $('statDrive').textContent      = '✓';
-    $('statDrivePill').textContent  = 'Connected';
+    $('statDrive').textContent     = '✓';
+    $('statDrivePill').textContent = 'Connected';
   } else {
     btn.classList.remove('active');
     btn.innerHTML = `

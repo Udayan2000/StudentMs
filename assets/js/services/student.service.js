@@ -1,7 +1,21 @@
 /**
  * student.service.js — StudentMS v3
- * OPTIMIZED: Instant save with background photo upload.
- * Text data saves immediately → redirect → photo uploads silently in bg.
+ * FIXED: Correct image save/load/edit/download flow.
+ *
+ * Key fixes:
+ *  1. addStudent: saves text instantly, uploads photo in background,
+ *     then writes real photoUrl back to Firestore (no premature blank).
+ *  2. updateStudent: does NOT blank photoUrl during transition —
+ *     old photo remains visible until new one is ready.
+ *  3. updateStudent: when no new photo, existing photoUrl is fully preserved.
+ *  4. _uploadPhotoBackground: accepts and correctly uses oldPhotoPath for cleanup.
+ *  5. photoPending field: the new photo's base64 is written onto the
+ *     document itself (same call that saves the text fields), instead of
+ *     only living in the browser (sessionStorage). This is what makes the
+ *     preview show up in EVERY open tab and survive a hard refresh, and why
+ *     it never disappears on a timer — it's cleared only when the real
+ *     photoUrl lands after a successful upload, or when the record is
+ *     deleted (the field goes away with the document).
  */
 'use strict';
 
@@ -10,36 +24,48 @@ const StudentService = (() => {
   const storage = () => firebase.storage();
   const col     = () => db().collection('students');
 
-  /* ── Background upload queue ────────────────────────── */
-  // Tracks in-progress background uploads so the table can show
-  // a placeholder and swap in the real URL when done.
-  const _pendingUploads = new Map(); // docId → { dataUrl, resolve[] }
-
   /* ════════════════════════════════════════
      ADD STUDENT — instant save, bg photo
   ════════════════════════════════════════ */
   async function addStudent(data, photoDataUrl) {
     try {
-      // 1. Strip the photoUrl from data — we'll fill it after upload
+      // 1. Save text record instantly WITHOUT blanking photoUrl.
+      //    We omit a real photoUrl/photoPath entirely so the document has no
+      //    stale empty string — the background upload will add them.
       const record = {
         ...data,
-        photoUrl:    '',          // placeholder until upload finishes
-        photoPath:   '',
-        isActive:    true,
-        createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt:   firebase.firestore.FieldValue.serverTimestamp(),
+        isActive:  true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
 
-      // 2. Save text record instantly → get docId
-      const ref = await col().add(record);
-      const docId = ref.id;
+      // Ensure photoUrl and photoPath start as empty strings (not undefined)
+      record.photoUrl  = '';
+      record.photoPath = '';
 
-      // 3. If there's a photo, kick off background upload (do NOT await)
+      // Stash the new photo's base64 directly on the document, in the same
+      // write as the text fields. Because it lives in Firestore (not
+      // sessionStorage), every tab that has this dashboard open — and a
+      // fresh page load — sees the photo immediately via the real-time
+      // listener. There is no timer: it only goes away once the background
+      // upload finishes (replaced by the real photoUrl) or the record is
+      // deleted.
       if (photoDataUrl) {
-        _uploadPhotoBackground(docId, data, photoDataUrl);
+        record.photoPending = photoDataUrl;
       }
 
-      // 4. Return immediately — caller redirects now
+      // 2. Write text record → get docId immediately
+      const ref   = await col().add(record);
+      const docId = ref.id;
+
+      // 3. Kick off background photo upload without awaiting.
+      //    It will write photoUrl + photoPath back to Firestore when done,
+      //    triggering the real-time listener to refresh the table row.
+      if (photoDataUrl) {
+        _uploadPhotoBackground(docId, data, photoDataUrl, '');
+      }
+
+      // 4. Return immediately — dashboard redirects now
       return { ok: true, id: docId };
     } catch (err) {
       console.error('[StudentService] addStudent error:', err);
@@ -57,21 +83,33 @@ const StudentService = (() => {
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
 
-      // If new photo provided, blank out photoUrl temporarily
-      // so UI shows spinner/placeholder while bg upload runs.
-      // If no new photo, keep existing photoUrl as-is.
+      // CRITICAL FIX: Do NOT blank photoUrl when a new photo is being uploaded.
+      // The old photo URL stays visible in the table while the new one uploads
+      // in the background. The background function will overwrite photoUrl only
+      // after the new upload succeeds.
+      //
+      // Explicitly remove photoUrl / photoPath from the immediate update so we
+      // never accidentally erase them here. They are managed solely by
+      // _uploadPhotoBackground when a new photo is provided.
+      delete update.photoUrl;
+      delete update.photoPath;
+
+      // Same idea as addStudent: stash the new photo's base64 on the
+      // document itself, in this same write, so it's visible everywhere
+      // immediately and isn't lost on a refresh or tab switch.
       if (photoDataUrl) {
-        update.photoUrl  = '';
-        update.photoPath = '';
+        update.photoPending = photoDataUrl;
       }
 
-      // 1. Save text fields instantly
+      // 1. Save text fields instantly (photoUrl/photoPath untouched in Firestore)
       await col().doc(docId).update(update);
 
-      // 2. Background photo upload (no await)
+      // 2. If a new photo was provided, upload in background.
+      //    Pass oldPhotoPath so the old file is deleted after the new one lands.
       if (photoDataUrl) {
-        _uploadPhotoBackground(docId, data, photoDataUrl, oldPhotoPath);
+        _uploadPhotoBackground(docId, data, photoDataUrl, oldPhotoPath || '');
       }
+      // If no new photo: existing photoUrl/photoPath remain unchanged in Firestore ✓
 
       return { ok: true, id: docId };
     } catch (err) {
@@ -82,36 +120,56 @@ const StudentService = (() => {
 
   /* ════════════════════════════════════════
      BACKGROUND PHOTO UPLOAD
-     Runs after redirect — updates Firestore
-     when done so table auto-refreshes.
+     Runs after the dashboard has already redirected.
+     Writes the real photoUrl back to Firestore so the
+     Firestore listener auto-refreshes the table row, and clears
+     photoPending now that the real URL is the source of truth.
   ════════════════════════════════════════ */
   async function _uploadPhotoBackground(docId, data, photoDataUrl, oldPhotoPath) {
     try {
-      // Convert base64 → blob (avoids large string uploads)
+      // Convert base64 dataUrl → Blob for efficient upload
       const blob     = _dataUrlToBlob(photoDataUrl);
       const ext      = blob.type === 'image/png' ? 'png' : 'jpg';
       const safeName = (data.name || 'student').replace(/[^a-z0-9]/gi, '_');
       const path     = `students/${docId}/${safeName}_${Date.now()}.${ext}`;
 
-      // Delete old photo if editing
-      if (oldPhotoPath) {
-        try { await storage().ref(oldPhotoPath).delete(); } catch (_) {}
+      // Delete the OLD photo file from Storage (if any) before writing new one.
+      // Use the path string, not the URL — URLs can't be used to delete.
+      if (oldPhotoPath && oldPhotoPath.trim()) {
+        try {
+          await storage().ref(oldPhotoPath).delete();
+        } catch (delErr) {
+          // Non-fatal: old file may already be deleted or path may be stale
+          console.warn('[StudentService] Could not delete old photo:', delErr.message);
+        }
       }
 
+      // Upload new blob to Firebase Storage
       const snap = await storage().ref(path).put(blob, { contentType: blob.type });
       const url  = await snap.ref.getDownloadURL();
 
-      // Update Firestore with real photo URL — listener triggers table re-render
-      await col().doc(docId).update({ photoUrl: url, photoPath: path });
+      // Write real photoUrl + photoPath back and clear photoPending — this
+      // fires the Firestore real-time listener which updates the table row
+      // (in every open tab) automatically, swapping the base64 preview for
+      // the real URL.
+      await col().doc(docId).update({
+        photoUrl:     url,
+        photoPath:    path,
+        photoPending: firebase.firestore.FieldValue.delete(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+      });
 
-      console.log('[StudentService] Background photo upload complete:', docId);
+      console.log('[StudentService] Background photo upload complete:', docId, url);
     } catch (err) {
       console.error('[StudentService] Background photo upload failed:', err);
-      // Non-fatal — record exists without photo, user can re-upload on edit
+      // Non-fatal: the text record is already saved, and photoPending is
+      // deliberately left in place so the base64 preview keeps showing
+      // (instead of disappearing) until the user re-saves with a photo or
+      // deletes the record. There is no automatic expiry.
     }
   }
 
-  /* ── Blob helper ─────────────────────── */
+  /* ── Blob conversion helper ─────────────── */
   function _dataUrlToBlob(dataUrl) {
     const [header, b64] = dataUrl.split(',');
     const mime  = header.match(/:(.*?);/)[1];
@@ -194,13 +252,28 @@ const StudentService = (() => {
   }
 
   function subscribeStudents({ orderBy = 'createdAt', orderDir = 'desc', limit = 10000 } = {}, cb) {
+    // Try ordered query first. If Firestore throws a missing-index error
+    // (code 'failed-precondition'), fall back to an unordered query so the
+    // table always loads. Users can create the index from the Firebase console
+    // link that appears in the browser console.
+    const onSnap = snap => {
+      const docs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+      cb(docs);
+    };
+    const onErr = err => {
+      console.error('[StudentService] subscribeStudents:', err);
+      if (err.code === 'failed-precondition' || err.message?.includes('index')) {
+        console.warn('[StudentService] Index missing — falling back to unordered query. '
+          + 'Create the index in Firebase Console to restore sort order.');
+        col()
+          .limit(limit)
+          .onSnapshot(onSnap, err2 => console.error('[StudentService] fallback query error:', err2));
+      }
+    };
     return col()
       .orderBy(orderBy, orderDir)
       .limit(limit)
-      .onSnapshot(snap => {
-        const docs = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
-        cb(docs);
-      }, err => console.error('[StudentService] subscribeStudents:', err));
+      .onSnapshot(onSnap, onErr);
   }
 
   function subscribeStats(cb) {
