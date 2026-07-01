@@ -144,7 +144,7 @@ class BulkImageDownloader {
     const school = this._sanitizeFileName(s.schoolName || 'School');
     const name   = this._sanitizeFileName(s.name       || 'Student');
     const roll   = this._sanitizeFileName(s.rollNo     || s.studentId || '');
-    return `${school}_${name}${roll ? '_' + roll : ''}`;
+    return `${school}${name}${roll ? '' + roll : ''}`;
   }
 
   _sanitizeFolderName(str) {
@@ -152,7 +152,7 @@ class BulkImageDownloader {
   }
 
   _sanitizeFileName(str) {
-    return (str || '').replace(/[/\\:*?"<>|.]/g, '').replace(/\s+/g, '_').substring(0, 40);
+    return (str || '').replace(/[/\\:*?"<>|.]/g, '').replace(/\s+/g, '').substring(0, 40);
   }
 
   _getExtension(url, mimeType) {
